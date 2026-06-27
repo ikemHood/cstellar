@@ -1,261 +1,220 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import * as StellarSdk from "@stellar/stellar-sdk";
 import { useNotes } from "@/hooks/useNotes";
-import { config, formatAmount } from "@/lib/stellar";
-import { bytesToHex } from "@/lib/crypto";
+import { config, formatAmount, rpc } from "@/lib/stellar";
 
-/**
- * Explorer comparison page - shows what the public chain sees vs
- * what Alice and Bob see for a confidential transfer.
- */
+type ChainEvent = {
+  id: string;
+  type: string;
+  ledger: number;
+  closedAt: string;
+  txHash: string;
+  topics: string[];
+  value: string;
+};
+
+function shorten(value: string, head = 10, tail = 8): string {
+  if (value.length <= head + tail + 3) return value;
+  return `${value.slice(0, head)}...${value.slice(-tail)}`;
+}
+
+function nativeToDisplay(value: unknown): string {
+  if (value instanceof Uint8Array) {
+    return `0x${Array.from(value)
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")}`;
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(nativeToDisplay).join(", ")}]`;
+  }
+  if (typeof value === "bigint") return value.toString();
+  if (value && typeof value === "object") {
+    return JSON.stringify(value, (_key, inner) =>
+      typeof inner === "bigint" ? inner.toString() : inner
+    );
+  }
+  return String(value ?? "");
+}
+
+async function loadWrapperEvents(): Promise<ChainEvent[]> {
+  if (!config.wrapperContractId) return [];
+
+  const latest = await rpc.getLatestLedger();
+  const startLedger = Math.max(1, latest.sequence - 50_000);
+  const response = await rpc.getEvents({
+    startLedger,
+    filters: [
+      {
+        type: "contract",
+        contractIds: [config.wrapperContractId],
+      },
+    ],
+    limit: 25,
+  });
+
+  return response.events
+    .map((event) => {
+      const topics = event.topic.map((topic) =>
+        nativeToDisplay(StellarSdk.scValToNative(topic))
+      );
+      return {
+        id: event.id,
+        type: topics[0] || "contract",
+        ledger: event.ledger,
+        closedAt: event.ledgerClosedAt,
+        txHash: event.txHash,
+        topics,
+        value: nativeToDisplay(StellarSdk.scValToNative(event.value)),
+      };
+    })
+    .reverse();
+}
+
 export default function ExplorerPage() {
   const { notes } = useNotes();
-  const assetId = config.assetAddress || "mock-asset";
+  const [events, setEvents] = useState<ChainEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Demo scenario data
-  const [scenario] = useState({
-    alice: {
-      sent: "17.5",
-      change: "82.5",
-      initialBalance: "100",
-    },
-    bob: {
-      received: "17.5",
-    },
-    public: {
-      nullifier: "0x7a3b...f291",
-      commitment1: "0x4e8c...a1d3",
-      commitment2: "0x9f21...b7e5",
-      amount: "HIDDEN",
-    },
-  });
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    loadWrapperEvents()
+      .then((loadedEvents) => {
+        if (!cancelled) setEvents(loadedEvents);
+      })
+      .catch((err: any) => {
+        if (!cancelled) setError(err.message || "Failed to load events");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold">Explorer</h1>
         <p className="text-stellar-blue mt-2">
-          See the difference between what the public chain observes and what
-          each participant sees in a confidential transfer.
+          Live wrapper events from testnet, paired with notes stored in this
+          browser.
         </p>
       </div>
 
-      {/* Demo scenario */}
-      <div className="card bg-stellar-blue/10">
-        <h3 className="font-semibold mb-2">Demo Scenario</h3>
-        <p className="text-sm text-stellar-blue">
-          Alice has 100 cXLM. She sends 17.5 cXLM to Bob. Bob later unwraps
-          5 cXLM back to public XLM.
+      <div className="card">
+        <h3 className="text-lg font-semibold mb-4">Public Chain View</h3>
+        <p className="text-sm text-stellar-blue mb-4">
+          Contract events expose commitments, nullifiers, encrypted note hashes,
+          and entry/exit amounts. Confidential transfer amounts remain hidden.
         </p>
+
+        {loading && <p className="text-sm text-stellar-blue">Loading events...</p>}
+        {error && <p className="text-sm text-red-400">Error: {error}</p>}
+
+        {!loading && !error && events.length === 0 && (
+          <p className="text-sm text-stellar-blue">
+            No wrapper events found in the recent testnet retention window.
+            Wrap or unwrap once, then return here.
+          </p>
+        )}
+
+        {events.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-stellar-blue text-left">
+                  <th className="pb-2">Event</th>
+                  <th className="pb-2">Ledger</th>
+                  <th className="pb-2">Tx</th>
+                  <th className="pb-2">Public Payload</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map((event) => (
+                  <tr key={event.id} className="border-t border-stellar-blue/10">
+                    <td className="py-3 font-mono">{event.type}</td>
+                    <td className="py-3">{event.ledger}</td>
+                    <td className="py-3">
+                      <a
+                        className="font-mono text-stellar-accent hover:underline"
+                        href={`https://stellar.expert/explorer/testnet/tx/${event.txHash}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {shorten(event.txHash)}
+                      </a>
+                    </td>
+                    <td className="py-3 font-mono text-xs break-all">
+                      {event.value}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* Comparison grid */}
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* Public view */}
-        <div className="card border-yellow-500/30">
-          <h3 className="text-lg font-semibold mb-4 text-yellow-400">
-            Public Chain View
-          </h3>
-          <p className="text-xs text-stellar-blue mb-4">
-            What anyone can see on the blockchain explorer
-          </p>
-          <div className="space-y-3 text-sm">
-            <div>
-              <div className="text-stellar-blue text-xs">Event Type:</div>
-              <div className="font-mono">conf_transfer</div>
-            </div>
-            <div>
-              <div className="text-stellar-blue text-xs">Nullifier:</div>
-              <div className="font-mono text-xs break-all">
-                {scenario.public.nullifier}
-              </div>
-            </div>
-            <div>
-              <div className="text-stellar-blue text-xs">
-                Output Commitment 1:
-              </div>
-              <div className="font-mono text-xs break-all">
-                {scenario.public.commitment1}
-              </div>
-            </div>
-            <div>
-              <div className="text-stellar-blue text-xs">
-                Output Commitment 2:
-              </div>
-              <div className="font-mono text-xs break-all">
-                {scenario.public.commitment2}
-              </div>
-            </div>
-            <div>
-              <div className="text-stellar-blue text-xs">
-                Transfer Amount:
-              </div>
-              <div className="text-red-400 font-bold">
-                {scenario.public.amount}
-              </div>
-            </div>
-            <div className="pt-3 border-t border-stellar-blue/20">
-              <div className="text-stellar-blue text-xs">
-                Encrypted Note Hash:
-              </div>
-              <div className="font-mono text-xs">0xb3c7...e4a2</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Alice's view */}
-        <div className="card border-blue-500/30">
-          <h3 className="text-lg font-semibold mb-4 text-blue-400">
-            Alice&apos;s View (Sender)
-          </h3>
-          <p className="text-xs text-stellar-blue mb-4">
-            What Alice sees in her wallet
-          </p>
-          <div className="space-y-3 text-sm">
-            <div>
-              <div className="text-stellar-blue text-xs">Action:</div>
-              <div>Sent confidential transfer</div>
-            </div>
-            <div>
-              <div className="text-stellar-blue text-xs">Sent Amount:</div>
-              <div className="text-xl font-bold text-blue-400">
-                {scenario.alice.sent} cXLM
-              </div>
-            </div>
-            <div>
-              <div className="text-stellar-blue text-xs">Change:</div>
-              <div className="text-lg font-semibold">
-                {scenario.alice.change} cXLM
-              </div>
-            </div>
-            <div>
-              <div className="text-stellar-blue text-xs">
-                Previous Balance:
-              </div>
-              <div>{scenario.alice.initialBalance} cXLM</div>
-            </div>
-            <div>
-              <div className="text-stellar-blue text-xs">
-                New Balance:
-              </div>
-              <div className="text-lg font-semibold text-stellar-accent">
-                {scenario.alice.change} cXLM
-              </div>
-            </div>
-            <div className="pt-3 border-t border-stellar-blue/20">
-              <div className="text-stellar-blue text-xs">Recipient:</div>
-              <div className="font-mono text-xs">GBob...xyz</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bob's view */}
+      <div className="grid md:grid-cols-2 gap-6">
         <div className="card border-green-500/30">
           <h3 className="text-lg font-semibold mb-4 text-green-400">
-            Bob&apos;s View (Recipient)
+            Hidden from public
           </h3>
-          <p className="text-xs text-stellar-blue mb-4">
-            What Bob sees after decrypting his note
-          </p>
-          <div className="space-y-3 text-sm">
-            <div>
-              <div className="text-stellar-blue text-xs">Action:</div>
-              <div>Received confidential transfer</div>
-            </div>
-            <div>
-              <div className="text-stellar-blue text-xs">
-                Received Amount:
-              </div>
-              <div className="text-xl font-bold text-green-400">
-                {scenario.bob.received} cXLM
-              </div>
-            </div>
-            <div>
-              <div className="text-stellar-blue text-xs">Sender:</div>
-              <div className="font-mono text-xs">GAlice...abc</div>
-            </div>
-            <div>
-              <div className="text-stellar-blue text-xs">
-                Note Decrypted:
-              </div>
-              <div className="text-green-400">Yes</div>
-            </div>
-            <div className="pt-3 border-t border-stellar-blue/20">
-              <div className="text-stellar-blue text-xs">
-                Bob can now:
-              </div>
-              <ul className="text-xs mt-1 space-y-1">
-                <li>Transfer privately to someone else</li>
-                <li>Unwrap to public XLM</li>
-                <li>Export receipt for compliance</li>
-              </ul>
-            </div>
-          </div>
+          <ul className="text-sm space-y-2 text-stellar-blue">
+            <li>Confidential transfer amount</li>
+            <li>Sender change amount</li>
+            <li>Participant balances</li>
+            <li>Commitment-to-note ownership mapping</li>
+          </ul>
+        </div>
+        <div className="card border-yellow-500/30">
+          <h3 className="text-lg font-semibold mb-4 text-yellow-400">
+            Visible to public
+          </h3>
+          <ul className="text-sm space-y-2 text-stellar-blue">
+            <li>Wrap and unwrap amounts at public entry/exit</li>
+            <li>Nullifier values for double-spend prevention</li>
+            <li>New commitment hashes</li>
+            <li>Encrypted note hashes</li>
+            <li>Transaction submitter address</li>
+          </ul>
         </div>
       </div>
 
-      {/* Privacy summary */}
       <div className="card">
-        <h3 className="text-lg font-semibold mb-4">
-          Privacy Analysis
-        </h3>
-        <div className="grid md:grid-cols-2 gap-6">
-          <div>
-            <h4 className="font-semibold text-green-400 mb-2">
-              Hidden from public
-            </h4>
-            <ul className="text-sm space-y-1 text-stellar-blue">
-              <li>17.5 cXLM was sent to Bob</li>
-              <li>82.5 cXLM is Alice&apos;s change</li>
-              <li>Alice&apos;s remaining balance</li>
-              <li>Bob&apos;s received amount</li>
-              <li>The link between commitments and amounts</li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-semibold text-yellow-400 mb-2">
-              Visible to public
-            </h4>
-            <ul className="text-sm space-y-1 text-stellar-blue">
-              <li>A confidential transfer happened</li>
-              <li>Nullifier values (prevent double-spend)</li>
-              <li>New commitment hashes</li>
-              <li>Encrypted note hashes</li>
-              <li>Transaction submitter address</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* Live notes (if any) */}
-      {notes.length > 0 && (
-        <div className="card">
-          <h3 className="text-lg font-semibold mb-4">
-            Your Local Notes
-          </h3>
+        <h3 className="text-lg font-semibold mb-4">Your Local Notes</h3>
+        {notes.length === 0 ? (
+          <p className="text-sm text-stellar-blue">
+            No local notes in this browser for the active wrapper.
+          </p>
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-stellar-blue text-left">
                   <th className="pb-2">ID</th>
                   <th className="pb-2">Amount</th>
+                  <th className="pb-2">Leaf</th>
                   <th className="pb-2">Status</th>
                   <th className="pb-2">Commitment</th>
                 </tr>
               </thead>
               <tbody>
                 {notes.slice(0, 10).map((note) => (
-                  <tr
-                    key={note.id}
-                    className="border-t border-stellar-blue/10"
-                  >
+                  <tr key={note.id} className="border-t border-stellar-blue/10">
                     <td className="py-2 font-mono text-xs">
-                      {note.id.slice(0, 16)}...
+                      {shorten(note.id, 14, 4)}
                     </td>
-                    <td className="py-2">
-                      {formatAmount(BigInt(note.amount))}
-                    </td>
+                    <td className="py-2">{formatAmount(BigInt(note.amount))} cXLM</td>
+                    <td className="py-2">{note.leafIndex ?? "-"}</td>
                     <td className="py-2">
                       {note.spent ? (
                         <span className="badge-error">Spent</span>
@@ -264,15 +223,15 @@ export default function ExplorerPage() {
                       )}
                     </td>
                     <td className="py-2 font-mono text-xs">
-                      {note.commitment.slice(0, 16)}...
+                      {shorten(note.commitment, 12, 8)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
