@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useWallet } from "@/hooks/useWallet";
 import { useNotes } from "@/hooks/useNotes";
-import { parseAmount, formatAmount, config } from "@/lib/stellar";
+import { getBalance, parseAmount, formatAmount, config } from "@/lib/stellar";
 import { bytesToHex } from "@/lib/crypto";
 import { getNoteCount, submitWrap } from "@/lib/contract";
 
@@ -13,12 +13,34 @@ export default function WrapPage() {
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [publicBalance, setPublicBalance] = useState<string | null>(null);
   const [result, setResult] = useState<{
     commitment: string;
     noteId: string;
   } | null>(null);
 
   const assetId = config.assetAddress || "mock-asset";
+
+  useEffect(() => {
+    if (!address) {
+      setPublicBalance(null);
+      return;
+    }
+
+    let cancelled = false;
+    setPublicBalance(null);
+    getBalance(address, "XLM")
+      .then((balance) => {
+        if (!cancelled) setPublicBalance(balance);
+      })
+      .catch(() => {
+        if (!cancelled) setPublicBalance("0");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
 
   const handleWrap = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +134,13 @@ export default function WrapPage() {
           <label className="label">Asset</label>
           <div className="input bg-stellar-blue/20 cursor-not-allowed">
             cXLM (Confidential XLM)
+          </div>
+        </div>
+
+        <div className="bg-stellar-blue/10 rounded-lg p-4">
+          <div className="text-sm text-stellar-blue">Available XLM</div>
+          <div className="mt-1 text-2xl font-semibold text-white">
+            {publicBalance === null ? "Loading..." : publicBalance}
           </div>
         </div>
 
