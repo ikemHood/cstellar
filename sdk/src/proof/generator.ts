@@ -56,10 +56,10 @@ function g1Bytes(point: [string, string, string]): Uint8Array {
 function g2Bytes(point: [[string, string], [string, string], [string, string]]): Uint8Array {
   const [x, y] = point;
   return concat([
-    decimalToBytes32(x[0]),
     decimalToBytes32(x[1]),
-    decimalToBytes32(y[0]),
+    decimalToBytes32(x[0]),
     decimalToBytes32(y[1]),
+    decimalToBytes32(y[0]),
   ]);
 }
 

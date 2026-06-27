@@ -68,10 +68,10 @@ function g1(point) {
 
 function g2(point) {
   return concat([
-    decimalToBytes32(point[0][0]),
     decimalToBytes32(point[0][1]),
-    decimalToBytes32(point[1][0]),
+    decimalToBytes32(point[0][0]),
     decimalToBytes32(point[1][1]),
+    decimalToBytes32(point[1][0]),
   ]);
 }
 
@@ -87,18 +87,20 @@ const vkVal = scMap([
 
 const account = await rpc.getAccount(admin);
 const contract = new StellarSdk.Contract(verifierId);
+const method = process.env.SCT01_VERIFIER_METHOD || "initialize";
+const args =
+  method === "update_vk"
+    ? [vkVal, StellarSdk.nativeToScVal(1, { type: "u32" })]
+    : [
+        StellarSdk.Address.fromString(admin).toScVal(),
+        vkVal,
+        StellarSdk.nativeToScVal(1, { type: "u32" }),
+      ];
 let tx = new StellarSdk.TransactionBuilder(account, {
   fee: StellarSdk.BASE_FEE,
   networkPassphrase,
 })
-  .addOperation(
-    contract.call(
-      "initialize",
-      StellarSdk.Address.fromString(admin).toScVal(),
-      vkVal,
-      StellarSdk.nativeToScVal(1, { type: "u32" })
-    )
-  )
+  .addOperation(contract.call(method, ...args))
   .setTimeout(180)
   .build();
 
