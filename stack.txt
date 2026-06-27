@@ -1,0 +1,55 @@
+Blockchain:
+- Stellar Testnet
+- Soroban
+- Rust
+- Stellar Asset Contract
+- SEP-41 token interface
+- Stellar CLI
+
+ZK:
+- Noir or Circom
+- Barretenberg or SnarkJS
+- BN254
+- Poseidon/Poseidon2
+- WASM proof generation
+
+Contracts:
+- Confidential wrapper contract
+- Verifier contract
+- Commitment/nullifier storage
+- Optional factory contract
+
+SDK:
+- TypeScript
+- @stellar/stellar-sdk
+- Note manager
+- Proof generator
+- Encryption/decryption helpers
+- Contract call helpers
+
+Frontend:
+- Next.js
+- TypeScript
+- TailwindCSS
+- Stellar Wallets Kit
+- Freighter
+- React Query/TanStack Query
+- Zustand
+
+Indexing:
+- Stellar RPC
+- Soroban events
+- Optional backend relay
+
+Optional Backend:
+- Bun
+- Hono
+- PostgreSQL
+- Drizzle
+
+Testing:
+- Rust contract tests
+- Circuit tests
+- Vitest
+- Playwright
+- GitHub Actions

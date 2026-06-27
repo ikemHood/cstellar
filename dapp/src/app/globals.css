@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #0b1f35;
+  --bg-secondary: #14395e;
+  --text-primary: #ffffff;
+  --text-secondary: #94a3b8;
+  --accent: #00d4ff;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #ef4444;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+@layer components {
+  .card {
+    @apply bg-stellar-dark/50 border border-stellar-blue/30 rounded-xl p-6 backdrop-blur-sm;
+  }
+
+  .btn-primary {
+    @apply bg-stellar-accent text-stellar-dark font-semibold px-6 py-3 rounded-lg
+           hover:bg-stellar-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply bg-stellar-blue text-white font-semibold px-6 py-3 rounded-lg
+           hover:bg-stellar-blue/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .input {
+    @apply w-full bg-stellar-dark border border-stellar-blue/50 rounded-lg px-4 py-3
+           text-white placeholder-stellar-blue focus:outline-none focus:border-stellar-accent
+           transition-colors;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-stellar-blue mb-2;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-green-500/20 text-green-400;
+  }
+
+  .badge-warning {
+    @apply badge bg-yellow-500/20 text-yellow-400;
+  }
+
+  .badge-error {
+    @apply badge bg-red-500/20 text-red-400;
+  }
+}

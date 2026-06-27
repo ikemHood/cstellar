@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+target/
+.next/
+dist/
+out/
+coverage/
+
+# Local env and tooling state
+.env
+.env.*
+!.env.example
+!.env.local.example
+.playwright-mcp/
+
+# Logs and OS files
+*.log
+.DS_Store

@@ -1,0 +1,16 @@
+[package]
+name = "sct01-wrapper"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+soroban-sdk = { version = "26", features = ["hazmat-address"] }
+soroban-poseidon = "26"
+
+[dev-dependencies]
+soroban-sdk = { version = "26", features = ["testutils", "hazmat-address"] }
+soroban-poseidon = { version = "26", features = ["testutils"] }

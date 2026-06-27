@@ -1,0 +1,1007 @@
+# PRD: Confidential Token Standard on Stellar
+
+## 1. Product Summary
+
+The product is a confidential token wrapper standard for Stellar.
+
+It allows any supported Stellar asset, such as USDC or a project token, to be wrapped into a confidential version. Once wrapped, users can transfer value privately without exposing the exact transfer amount publicly on-chain.
+
+The system will include:
+
+* A reusable confidential token standard.
+* A reference Soroban contract implementation.
+* A ZK circuit suite for private balance and transfer validation.
+* A TypeScript SDK for dApps and wallets.
+* A demo dApp where users can wrap, transfer, receive, and unwrap confidential tokens.
+
+The demo dApp is not the main product. The main product is the standard and developer infrastructure.
+
+## 2. Product Positioning
+
+### One-liner
+
+A confidential token wrapper standard for private transfers on Stellar.
+
+### Product message
+
+Wrap any supported Stellar asset into a confidential token, transfer privately, and unwrap back to the original asset when needed.
+
+### What the product hides
+
+The product hides:
+
+* Transfer amount.
+* User confidential balance.
+* Internal private transfer history.
+* Optional recipient note details, depending on implementation level.
+
+### What may remain public in the MVP
+
+The MVP may still expose:
+
+* Wrapper contract address.
+* Sender submitting a transaction.
+* Public wrap amount.
+* Public unwrap amount.
+* Nullifiers and commitments.
+* Token type being used, unless multi-asset privacy is added later.
+
+## 3. Why This Matters
+
+Public blockchains expose financial activity by default.
+
+For normal token transfers, anyone can inspect:
+
+* Wallet balances.
+* Transfer amounts.
+* Payment timing.
+* Business payment patterns.
+* Salary or contractor payments.
+* Investor allocations.
+* Treasury movements.
+
+This limits real-world adoption for payroll, corporate payments, institutional settlement, private investment rounds, and user-facing financial apps.
+
+A confidential token standard solves this by letting developers add private transfer functionality to existing assets without creating a new L1, new wallet ecosystem, or isolated privacy app.
+
+## 4. Inspiration
+
+The product is inspired by Zama-style confidential token systems and ERC-7984.
+
+However, the Stellar implementation should not copy the FHE model exactly.
+
+Zama-style confidential tokens use encrypted values and FHE-enabled computation. Stellar’s practical path is to use ZK proofs, commitments, nullifiers, Merkle trees, and verifier contracts.
+
+In simple terms:
+
+* Zama model: compute over encrypted balances.
+* Stellar MVP model: prove a confidential transfer is valid without revealing the values.
+
+## 5. Core Concept
+
+A user deposits a public token into a wrapper contract.
+
+The wrapper contract locks the public token and issues a private representation as a confidential note or confidential balance commitment.
+
+The user can then transfer confidential value to another user by submitting a ZK proof.
+
+The proof shows that:
+
+* The sender owns the confidential balance or note.
+* The sender has enough value.
+* The input amount equals the output amount plus optional fee.
+* The input note has not been spent before.
+* The output notes are correctly formed.
+* No token value was created from nothing.
+* The actual amount is not revealed publicly.
+
+The recipient decrypts their received note locally and can later transfer it privately or unwrap it back to the original token.
+
+## 6. Recommended Architecture
+
+The recommended MVP architecture is a note-based confidential token wrapper.
+
+This is closer to a privacy pool or shielded payment model than to an account-based ERC-20 model.
+
+### Why note-based is better for MVP
+
+An account-based encrypted balance model is harder to build on Stellar without an FHE coprocessor.
+
+A note-based model is more realistic because:
+
+* Each private balance is represented as a commitment.
+* Transfers consume old notes and create new notes.
+* ZK proofs validate conservation of value.
+* Nullifiers prevent double spending.
+* The contract does not need to compute directly on encrypted amounts.
+
+## 7. Main Components
+
+### 7.1 Underlying Asset
+
+The public token being wrapped.
+
+Examples:
+
+* USDC
+* XLM
+* Project token
+* Any Stellar asset exposed through the Stellar Asset Contract
+
+### 7.2 Confidential Wrapper Contract
+
+This contract locks the public token and manages confidential state.
+
+Responsibilities:
+
+* Accept deposits of the underlying token.
+* Store note commitments.
+* Store spent nullifiers.
+* Verify transfer proofs.
+* Verify unwrap proofs.
+* Release underlying token during unwrap.
+* Emit privacy-safe events.
+
+### 7.3 Verifier Contract
+
+A dedicated contract or module responsible for proof verification.
+
+Responsibilities:
+
+* Verify ZK proofs.
+* Validate public inputs.
+* Enforce proof domain separation.
+* Reject malformed proofs.
+* Reject replayed proofs.
+
+This should be separate from the wrapper logic where possible to reduce audit complexity.
+
+### 7.4 Circuit Suite
+
+The circuits define the private statements that users prove.
+
+Required MVP circuits:
+
+1. Deposit note creation circuit
+2. Private transfer circuit
+3. Unwrap/withdraw circuit
+4. Range proof circuit
+5. Nullifier derivation circuit
+
+### 7.5 Client SDK
+
+The SDK helps dApps and wallets interact with the confidential token standard.
+
+Responsibilities:
+
+* Generate user viewing keys.
+* Create note commitments.
+* Encrypt notes to recipients.
+* Decrypt received notes.
+* Generate ZK proofs.
+* Build Soroban transaction calls.
+* Track local note state.
+* Export/import recovery data.
+
+### 7.6 Demo dApp
+
+The demo dApp proves the standard works.
+
+Core demo actions:
+
+* Connect wallet.
+* Select an asset.
+* Wrap public token.
+* View private balance.
+* Send confidential token.
+* Receive confidential token.
+* Unwrap confidential token.
+* Show public explorer view where the transferred value is hidden.
+
+## 8. Standard Scope
+
+The standard should define:
+
+* Contract interface.
+* Event schema.
+* Commitment format.
+* Nullifier format.
+* Encrypted note format.
+* Public input format.
+* Metadata format.
+* Proof statement requirements.
+* Compliance/view-key extension.
+* SDK behavior.
+* Recommended wallet UX.
+
+The standard should not be only a contract implementation. It should be a full interoperability spec.
+
+## 9. Suggested Standard Name
+
+Working name:
+
+## SCT-01: Stellar Confidential Token Wrapper
+
+Alternative names:
+
+* Stellar Confidential Token Standard
+* Confidential Asset Wrapper
+* Shielded Asset Wrapper
+* Private Asset Wrapper
+* Confidential Transfer Token Standard
+
+The standard can use a friendly product name publicly, but the technical spec should have a clean name like SCT-01.
+
+## 10. Token Model
+
+### 10.1 Public token
+
+The original token remains unchanged.
+
+Example:
+
+A user owns 100 USDC.
+
+### 10.2 Confidential token
+
+The user wraps 100 USDC into cUSDC.
+
+The public USDC is locked in the wrapper contract.
+
+The user receives a private note representing 100 cUSDC.
+
+### 10.3 Note
+
+A note represents private spendable value.
+
+A note contains:
+
+* Asset identifier
+* Amount
+* Owner public key
+* Randomness
+* Nullifier secret
+* Optional memo
+* Optional compliance disclosure data
+
+The note is never stored publicly in plaintext.
+
+### 10.4 Commitment
+
+A commitment is a hash of the note data.
+
+Example:
+
+commitment = Hash(asset_id, amount, owner_key, randomness, nullifier_secret)
+
+The contract stores the commitment, not the plaintext note.
+
+### 10.5 Nullifier
+
+A nullifier is a unique value derived from a note’s secret.
+
+When a note is spent, its nullifier is published.
+
+The contract rejects any transaction that tries to reuse the same nullifier.
+
+This prevents double spending without revealing which exact note was spent.
+
+## 11. Core Flows
+
+## 11.1 Wrap Flow
+
+Goal: Convert public token into confidential token.
+
+Steps:
+
+1. User connects wallet.
+2. User selects public asset.
+3. User enters amount to wrap.
+4. dApp generates a private note locally.
+5. dApp creates a note commitment.
+6. User approves or signs transfer of public token to wrapper contract.
+7. Wrapper contract receives public token.
+8. Wrapper contract stores the commitment.
+9. User’s wallet stores the encrypted note locally.
+10. dApp shows private balance.
+
+Publicly visible:
+
+* User deposited into wrapper.
+* Deposit amount may be visible.
+* Commitment was created.
+
+Private:
+
+* Future internal transfers from this note.
+* Later split/merge activity.
+* Recipient amounts inside the confidential system.
+
+## 11.2 Confidential Transfer Flow
+
+Goal: Send confidential token without revealing transfer amount.
+
+Example:
+
+Alice sends 17.5 cUSDC to Bob.
+
+Steps:
+
+1. Alice enters Bob’s confidential receive address.
+2. Alice enters amount.
+3. dApp selects one or more Alice notes as inputs.
+4. dApp creates output note for Bob.
+5. dApp creates change note for Alice.
+6. dApp generates proof that input total equals output total.
+7. dApp submits proof, nullifier, and new commitments.
+8. Contract verifies proof.
+9. Contract checks nullifier has not been used.
+10. Contract marks input nullifier as spent.
+11. Contract stores Bob’s output commitment.
+12. Contract stores Alice’s change commitment.
+13. Bob decrypts his incoming note locally.
+
+Publicly visible:
+
+* A confidential transfer occurred.
+* One or more nullifiers were spent.
+* New commitments were created.
+
+Hidden:
+
+* Transfer amount.
+* Alice’s remaining confidential balance.
+* Bob’s received amount.
+
+## 11.3 Receive Flow
+
+Goal: Let recipient discover and decrypt received notes.
+
+Options:
+
+1. Event scanning
+2. Off-chain relay
+3. Encrypted note inbox
+4. Wallet-to-wallet note sharing
+5. QR or payment request flow
+
+MVP recommendation:
+
+Use encrypted note payloads emitted in events or stored off-chain by the dApp backend.
+
+Bob’s wallet scans encrypted note payloads and attempts decryption with Bob’s viewing key.
+
+If decryption succeeds, the note appears in Bob’s private balance.
+
+## 11.4 Unwrap Flow
+
+Goal: Convert confidential token back to public token.
+
+Steps:
+
+1. User selects note or amount to unwrap.
+2. dApp generates proof that user owns sufficient confidential value.
+3. dApp submits unwrap proof and recipient public address.
+4. Contract verifies proof.
+5. Contract marks nullifier as spent.
+6. Contract transfers public token from wrapper vault to recipient.
+7. dApp marks note as spent.
+
+Publicly visible:
+
+* Recipient receives public token.
+* Unwrap amount may be visible.
+
+Private:
+
+* Previous internal transfer path.
+* Prior confidential balance history.
+
+## 12. Contract Interface Draft
+
+The MVP contract interface should include:
+
+```rust
+pub trait ConfidentialTokenWrapper {
+    fn asset(env: Env) -> Address;
+
+    fn metadata(env: Env) -> ConfidentialTokenMetadata;
+
+    fn wrap(
+        env: Env,
+        from: Address,
+        amount: i128,
+        commitment: BytesN<32>,
+        encrypted_note: Bytes,
+    );
+
+    fn confidential_transfer(
+        env: Env,
+        proof: Bytes,
+        public_inputs: TransferPublicInputs,
+        nullifiers: Vec<BytesN<32>>,
+        output_commitments: Vec<BytesN<32>>,
+        encrypted_notes: Vec<Bytes>,
+    );
+
+    fn unwrap(
+        env: Env,
+        proof: Bytes,
+        public_inputs: UnwrapPublicInputs,
+        nullifier: BytesN<32>,
+        recipient: Address,
+        amount: i128,
+    );
+
+    fn is_spent(env: Env, nullifier: BytesN<32>) -> bool;
+
+    fn commitment_exists(env: Env, commitment: BytesN<32>) -> bool;
+}
+```
+
+## 13. Metadata Interface
+
+Each confidential wrapper should expose metadata:
+
+```rust
+pub struct ConfidentialTokenMetadata {
+    pub name: String,
+    pub symbol: String,
+    pub decimals: u32,
+    pub underlying_asset: Address,
+    pub version: u32,
+    pub circuit_version: u32,
+    pub verifier: Address,
+    pub privacy_model: Symbol,
+}
+```
+
+Example:
+
+* name: Confidential USDC
+* symbol: cUSDC
+* underlying_asset: USDC SAC address
+* privacy_model: note_commitment_v1
+
+## 14. Events
+
+Events should be useful for indexing without leaking private values.
+
+### Wrap event
+
+```rust
+topics: ["wrap", asset, from]
+data: {
+  commitment,
+  encrypted_note_hash
+}
+```
+
+### Confidential transfer event
+
+```rust
+topics: ["conf_transfer", asset]
+data: {
+  nullifiers,
+  output_commitments,
+  encrypted_note_hashes
+}
+```
+
+### Unwrap event
+
+```rust
+topics: ["unwrap", asset, recipient]
+data: {
+  nullifier,
+  amount
+}
+```
+
+Note: unwrap amount is public because public token transfer requires a public amount.
+
+## 15. ZK Circuit Requirements
+
+## 15.1 Transfer circuit
+
+Private inputs:
+
+* Input note amount
+* Input note owner secret
+* Input note randomness
+* Input note nullifier secret
+* Output amount to recipient
+* Change amount
+* Output randomness
+* Change randomness
+* Merkle path for input note
+
+Public inputs:
+
+* Merkle root
+* Nullifier
+* Output commitment
+* Change commitment
+* Asset ID
+* Contract ID
+* Chain/network ID
+* Action type
+
+Circuit constraints:
+
+* Input note commitment exists in Merkle tree.
+* Sender owns input note.
+* Nullifier is derived correctly.
+* Input amount equals output amount plus change amount.
+* Output commitment is formed correctly.
+* Change commitment is formed correctly.
+* Amounts are non-negative and within range.
+* Asset ID is unchanged.
+* Proof is bound to contract, network, and action type.
+
+## 15.2 Unwrap circuit
+
+Private inputs:
+
+* Note amount
+* Owner secret
+* Randomness
+* Nullifier secret
+* Merkle path
+
+Public inputs:
+
+* Merkle root
+* Nullifier
+* Asset ID
+* Recipient
+* Unwrap amount
+* Contract ID
+* Network ID
+* Action type
+
+Circuit constraints:
+
+* Note exists in Merkle tree.
+* User owns note.
+* Nullifier is derived correctly.
+* Note amount equals unwrap amount or note amount is split into unwrap plus change.
+* Asset ID matches.
+* Proof is bound to recipient and amount.
+
+## 16. Privacy Levels
+
+## Level 1: Amount-private transfers
+
+* Transfer amount is hidden.
+* Balances are hidden.
+* Sender and recipient may still be inferable.
+
+This should be the MVP target.
+
+## Level 2: Note-private transfers
+
+* Amount is hidden.
+* Recipient note is encrypted.
+* Public cannot know the value of each new note.
+* Public sees commitments and nullifiers only.
+
+This should be the stronger MVP if feasible.
+
+## Level 3: Stronger sender/recipient privacy
+
+* Uses stealth addresses or one-time receiver keys.
+* Makes it harder to link sender and recipient.
+* More complex wallet UX.
+
+This can be post-MVP.
+
+## Level 4: Compliance-aware privacy
+
+* Users can grant view access to auditors.
+* Users can generate selective disclosure proofs.
+* Regulated issuers can add policy hooks.
+
+This should be designed now but implemented after MVP.
+
+## 17. Compliance and Selective Disclosure
+
+Privacy should not mean zero accountability.
+
+The standard should support optional disclosure.
+
+Possible disclosure features:
+
+* User-controlled view key
+* Auditor observer key
+* Proof of payment
+* Proof of balance
+* Proof that a transaction amount was below or above a threshold
+* Proof that a payment happened without exposing full wallet history
+* Compliance allowlist/denylist hook
+
+For MVP, implement simple user-controlled disclosure:
+
+A user can export a note receipt showing:
+
+* Sender
+* Recipient
+* Amount
+* Timestamp
+* Transaction hash
+* Decryption proof or signature
+
+This can be shared with an auditor, merchant, employer, or counterparty.
+
+## 18. dApp Requirements
+
+## 18.1 Pages
+
+### Home page
+
+Explains the product:
+
+* Wrap public assets.
+* Transfer privately.
+* Unwrap when needed.
+* Amounts are hidden on-chain.
+
+### Dashboard
+
+Shows:
+
+* Connected wallet
+* Public token balance
+* Confidential token balance
+* Recent private notes
+* Pending received notes
+* Spent notes
+* Claimable/decryptable notes
+
+### Wrap page
+
+User can:
+
+* Select asset
+* Enter amount
+* Generate note
+* Submit wrap transaction
+* See resulting private balance
+
+### Transfer page
+
+User can:
+
+* Enter recipient confidential address
+* Enter amount
+* Generate proof
+* Submit confidential transfer
+* Copy proof receipt
+
+### Receive page
+
+User can:
+
+* Create confidential receive address
+* Show QR code
+* Scan encrypted notes
+* Decrypt incoming notes
+
+### Unwrap page
+
+User can:
+
+* Select amount
+* Generate unwrap proof
+* Submit unwrap transaction
+* Receive public asset
+
+### Explorer comparison page
+
+This is important for the demo.
+
+Show:
+
+* What the public chain sees
+* What Alice sees
+* What Bob sees
+
+Example:
+
+Public sees:
+
+* Nullifier: 0xabc...
+* Commitment: 0xdef...
+* Commitment: 0x123...
+* Amount: hidden
+
+Alice sees:
+
+* Sent 17.5 cUSDC
+* Change 82.5 cUSDC
+
+Bob sees:
+
+* Received 17.5 cUSDC
+
+## 19. Demo Story
+
+The hackathon demo should use a very simple story.
+
+Alice has 100 USDC.
+
+She wraps it into cUSDC.
+
+She sends 17.5 cUSDC to Bob.
+
+On the public explorer, nobody can see that 17.5 was sent.
+
+Bob opens the dApp and sees 17.5 cUSDC.
+
+Bob unwraps 5 cUSDC back into public USDC.
+
+The public can see the unwrap amount, but cannot see the private path that led to Bob receiving the funds.
+
+## 20. MVP Scope
+
+The MVP should include:
+
+* One supported asset, preferably testnet USDC or a mock Stellar asset.
+* One confidential wrapper contract.
+* One transfer circuit.
+* One unwrap circuit.
+* One verifier contract.
+* One demo dApp.
+* One SDK package.
+* Simple local note storage.
+* Encrypted note sharing through events or backend relay.
+* Basic public explorer comparison page.
+
+## 21. Non-MVP Scope
+
+Do not build these first:
+
+* Full private DeFi.
+* Full wallet recovery.
+* Multi-asset privacy pool.
+* Mobile wallet.
+* Mainnet deployment.
+* Fiat on/off-ramp.
+* Complex compliance system.
+* Anonymous recipient system.
+* Launchpad integration.
+* Payroll integration.
+
+Those can come later.
+
+## 22. Technical Stack
+
+### Smart contracts
+
+* Soroban
+* Rust
+* Stellar Asset Contract for underlying asset transfer
+* Confidential wrapper contract
+* Dedicated verifier contract
+
+### ZK circuits
+
+Options:
+
+* Noir
+* Circom
+* RISC Zero, if appropriate for proof model
+
+Recommended MVP:
+
+Use Noir or Circom for a simple note transfer circuit.
+
+### Frontend
+
+* Next.js
+* TypeScript
+* Stellar JS SDK
+* Freighter or Stellar Wallets Kit
+* Local encrypted note storage
+
+### SDK
+
+* TypeScript SDK
+* WASM proof generation
+* Note encryption/decryption
+* Contract call helpers
+
+## 23. Security Requirements
+
+The system must protect against:
+
+* Double spending
+* Invalid proof payloads
+* Replay attacks
+* Fake commitments
+* Invalid Merkle roots
+* Wrong asset ID
+* Wrong contract ID
+* Wrong network ID
+* Negative values
+* Overflow/underflow
+* Dust attacks
+* Note loss
+* Metadata mismatch
+* Malicious encrypted note payloads
+
+Required security controls:
+
+* Domain separation for each proof type.
+* Proof bound to contract ID and network.
+* Nullifier storage and spent checks.
+* Range checks for amounts.
+* Circuit versioning.
+* Verifier versioning.
+* Explicit asset binding.
+* Negative-path tests.
+* Resource simulation tests.
+* Clear “not audited” warning for hackathon version.
+
+## 24. Testing Plan
+
+### Unit tests
+
+* Wrap creates commitment.
+* Transfer rejects invalid proof.
+* Transfer rejects reused nullifier.
+* Transfer rejects wrong asset ID.
+* Transfer rejects malformed public inputs.
+* Unwrap rejects spent note.
+* Unwrap releases correct public amount.
+
+### Circuit tests
+
+* Valid transfer proof passes.
+* Tampered output commitment fails.
+* Tampered amount fails.
+* Wrong Merkle path fails.
+* Wrong owner secret fails.
+* Reused nullifier fails.
+
+### Integration tests
+
+* Alice wraps.
+* Alice transfers to Bob.
+* Bob decrypts note.
+* Bob transfers to Charlie.
+* Bob unwraps.
+* Public event logs do not reveal transfer amount.
+
+### Demo tests
+
+* Public explorer page hides amount.
+* Alice dashboard shows correct balance.
+* Bob dashboard shows received balance.
+* Contract state preserves total supply.
+
+## 25. Success Metrics
+
+For hackathon:
+
+* A user can wrap a token.
+* A user can send a confidential transfer.
+* The recipient can decrypt and view the amount.
+* Public event data does not reveal the transfer amount.
+* A user can unwrap back to the original token.
+* The contract prevents double spending.
+* The dApp clearly demonstrates the privacy difference.
+
+For longer-term adoption:
+
+* Number of wrapped assets.
+* Number of confidential transfers.
+* Number of integrated wallets.
+* Number of projects using the standard.
+* SDK installs.
+* Independent audits.
+* Ecosystem integrations.
+
+## 26. Key Risks
+
+### ZK complexity
+
+Generating and verifying proofs correctly is hard. The MVP should keep the circuit small and focused.
+
+### UX complexity
+
+Users should not see commitments, nullifiers, or proofs in the main UX. The dApp should speak in terms of private balance, send, receive, and unwrap.
+
+### Note loss
+
+If users lose their local notes or viewing keys, they may lose access to confidential balances. The MVP should include export/import backup.
+
+### Privacy leakage through wrap/unwrap
+
+Wrap and unwrap amounts may be visible. The demo should explain that internal confidential transfers are private, while entry and exit points can still reveal information.
+
+### Compliance concerns
+
+A confidential token standard can be misused. The design should include optional view keys, disclosure receipts, and policy hooks.
+
+### Production readiness
+
+The hackathon version should not be marketed as production-ready or safe for real funds.
+
+## 27. Roadmap
+
+### Phase 1: Research and specification
+
+Deliverables:
+
+* SCT-01 draft spec
+* Architecture diagram
+* Circuit statement definitions
+* Contract interface
+* Event schema
+* Demo flow
+
+### Phase 2: Contract MVP
+
+Deliverables:
+
+* Wrapper contract
+* Verifier contract
+* Mock asset or testnet asset integration
+* Commitment storage
+* Nullifier storage
+* Wrap function
+* Transfer function
+* Unwrap function
+
+### Phase 3: Circuit MVP
+
+Deliverables:
+
+* Transfer circuit
+* Unwrap circuit
+* Proof generation script
+* Proof verification tests
+* Valid and invalid test vectors
+
+### Phase 4: SDK
+
+Deliverables:
+
+* Note creation helper
+* Note encryption helper
+* Note decryption helper
+* Proof generation wrapper
+* Contract call builder
+* Local note manager
+
+### Phase 5: Demo dApp
+
+Deliverables:
+
+* Wallet connection
+* Wrap page
+* Transfer page
+* Receive page
+* Unwrap page
+* Explorer comparison page
+
+### Phase 6: Polish and submission
+
+Deliverables:
+
+* Demo video
+* README
+* Architecture doc
+* Standard draft
+* Security notes
+* Known limitations
+* Future roadmap
+
+## 28. Final MVP Definition
+
+The MVP is successful if it proves this:
+
+A normal Stellar token can be wrapped into a confidential token, transferred privately, and unwrapped, while the public chain cannot see the internal transfer amount.
+
+That is the core innovation.

@@ -1,0 +1,8 @@
+[package]
+name = "sct01_unwrap_circuit"
+version = "0.1.0"
+type = "bin"
+edition = "2021"
+
+[dependencies]
+poseidon = { tag = "v0.1.1", git = "https://github.com/noir-lang/poseidon" }
