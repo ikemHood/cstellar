@@ -1,15 +1,15 @@
-# SCT-01: Stellar Confidential Token Wrapper
+# SCT-01: Stellar Confidential Transfer Standard
 
-A confidential token wrapper standard for private transfers on Stellar.
+SCT-01 is a developer standard and kit for adding private transfers to Stellar apps.
 
-Wrap any Stellar asset into a confidential token, transfer privately, and unwrap back to the original asset when needed.
+Deposit any supported Stellar asset into a Confidential Transfer Adapter, transfer value privately as notes, and withdraw back to the original asset when needed.
 
 > **WARNING: This is a hackathon prototype. NOT AUDITED. Do NOT use with real funds.**
 
 ## Architecture
 
 ```
-Browser Groth16 proof     Verifier Contract       Wrapper Contract       dApp
+Browser Groth16 proof     Verifier Contract       Transfer Adapter       dApp
 (Circom/snarkjs)      -->  (CAP-0074 BN254)  -->  (CAP-0075 Poseidon) --> (UX)
 ```
 
@@ -17,12 +17,12 @@ Browser Groth16 proof     Verifier Contract       Wrapper Contract       dApp
 
 | Component | Location | Description |
 |-----------|----------|-------------|
-| Wrapper Contract | `contracts/wrapper/` | Soroban contract managing commitments, nullifiers, and vault |
+| Confidential Transfer Adapter | `contracts/wrapper/` | Soroban contract managing commitments, nullifiers, and vault |
 | Verifier Contract | `contracts/verifier/` | BN254 Groth16 verifier using CAP-0074 host functions |
-| Final Circuit | `circuits/circom/sct01.circom` | Circom Groth16 circuit for transfer + unwrap |
+| Final Circuit | `circuits/circom/sct01.circom` | Circom Groth16 circuit for transfer + withdraw |
 | Legacy Circuits | `circuits/transfer/`, `circuits/unwrap/` | Exploratory Noir circuits, not used by the demo verifier |
 | TypeScript SDK | `sdk/` | Note management, crypto, proof generation, contract client |
-| Demo dApp | `dapp/` | Next.js app with wrap, transfer, receive, unwrap, explorer |
+| Demo dApp | `dapp/` | Next.js app with deposit, transfer, receive, withdraw, explorer |
 
 ## How It Works
 
@@ -30,9 +30,9 @@ Browser Groth16 proof     Verifier Contract       Wrapper Contract       dApp
 
 Instead of encrypted account balances, SCT-01 uses **notes** - discrete units of confidential value.
 
-1. **Wrap**: Deposit public tokens, receive a private note (commitment stored on-chain)
+1. **Deposit**: Deposit public tokens into an adapter, receive a private note (commitment stored on-chain)
 2. **Transfer**: Spend input notes, create output notes. ZK proof proves value conservation without revealing amounts
-3. **Unwrap**: Spend a note, receive public tokens back
+3. **Withdraw**: Spend a note, receive public tokens back
 
 ### What's Hidden
 
@@ -43,9 +43,9 @@ Instead of encrypted account balances, SCT-01 uses **notes** - discrete units of
 
 ### What's Public
 
-- Wrapper contract address
+- Adapter contract address
 - Transaction submitter
-- Wrap/unwrap amounts (entry/exit points)
+- Deposit/withdraw amounts (entry/exit points)
 - Commitments and nullifiers (opaque hashes)
 
 ## Quick Start
@@ -83,7 +83,7 @@ stellar contract deploy \
   --wasm target/wasm32v1-none/release/sct01_verifier.wasm \
   --source alice --network testnet
 
-# Deploy wrapper
+# Deploy adapter contract
 stellar contract deploy \
   --wasm target/wasm32v1-none/release/sct01_wrapper.wasm \
   --source alice --network testnet
@@ -94,7 +94,7 @@ STELLAR_SECRET_KEY=S... \
   node scripts/init-verifier-from-vk.mjs VERIFIER_ID ../dapp/public/circuits/verification_key.json
 cd ..
 
-# Initialize wrapper
+# Initialize adapter contract
 stellar contract invoke \
   --id WRAPPER_ID --source alice --network testnet -- \
   initialize \
@@ -106,9 +106,11 @@ stellar contract invoke \
 
 For the dApp demo, set `NEXT_PUBLIC_ASSET_ADDRESS` to the SAC contract ID,
 `NEXT_PUBLIC_VERIFIER_CONTRACT_ID` to `VERIFIER_ID`, and
-`NEXT_PUBLIC_WRAPPER_CONTRACT_ID` to `WRAPPER_ID`.
+`NEXT_PUBLIC_WRAPPER_CONTRACT_ID` to `WRAPPER_ID`. The env var keeps the
+original contract package name for demo compatibility; user-facing product
+language calls this contract the Confidential Transfer Adapter.
 
-The verifier no longer has an admin proof-approval path. Transfer and unwrap
+The verifier no longer has an admin proof-approval path. Transfer and withdraw
 require a real Groth16 proof whose public signals are:
 
 ```text
@@ -124,7 +126,7 @@ dapp/public/vendor/snarkjs.min.js
 ```
 
 The current final circuit supports one input note and two output commitments
-for transfer: recipient output + change output. Unwrap supports one exact-value
+for transfer: recipient output + change output. Withdraw supports one exact-value
 input note.
 
 ### Build Final Circuit Artifacts
@@ -181,19 +183,19 @@ npm run dev
 ### Demo Flow
 
 1. Deploy and initialize `sct01_verifier` with `dapp/public/circuits/verification_key.json`.
-2. Deploy and initialize `sct01_wrapper` with the verifier ID and SAC asset ID.
+2. Deploy and initialize `sct01_wrapper` with the verifier ID and SAC asset ID. This is the reference Confidential Transfer Adapter.
 3. Put `NEXT_PUBLIC_WRAPPER_CONTRACT_ID`, `NEXT_PUBLIC_VERIFIER_CONTRACT_ID`, and `NEXT_PUBLIC_ASSET_ADDRESS` in `dapp/.env.local`.
 4. Open `http://localhost:3000`, connect Freighter on testnet.
-5. Wrap a small amount. This stores a commitment and local note with Merkle leaf index.
+5. Deposit a small amount. This stores a commitment and local note with Merkle leaf index.
 6. Transfer less than the note amount to another `G...` address. Browser generates a real Groth16 proof, contract verifies it on testnet, one nullifier is spent, and two commitments are inserted.
-7. Unwrap an exact-value note. Public token transfer is visible; private transfer history remains hidden behind commitments/nullifiers.
+7. Withdraw an exact-value note. Public token transfer is visible; private transfer history remains hidden behind commitments/nullifiers.
 
 ## Project Structure
 
 ```
 cstellar/
 ├── contracts/
-│   ├── wrapper/          # Soroban wrapper contract
+│   ├── wrapper/          # Soroban Confidential Transfer Adapter
 │   │   ├── Cargo.toml
 │   │   └── src/lib.rs
 │   └── verifier/         # Soroban verifier contract
@@ -215,7 +217,7 @@ cstellar/
 │   └── tests/
 ├── dapp/                 # Next.js demo dApp
 │   └── src/
-│       ├── app/          # Pages (wrap, transfer, receive, unwrap, explorer)
+│       ├── app/          # Pages (deposit, transfer, receive, withdraw, explorer)
 │       ├── components/   # UI components
 │       ├── hooks/        # React hooks (wallet, notes)
 │       ├── store/        # Zustand state
@@ -229,16 +231,16 @@ cstellar/
 
 - **NOT AUDITED** - This is a hackathon prototype
 - ZK proof verification uses BN254 Groth16 pairing checks through CAP-0074.
-- The wrapper uses Poseidon BN254 hashing through CAP-0075 via
+- The adapter uses Poseidon BN254 hashing through CAP-0075 via
   `soroban-poseidon`.
-- The dApp refuses to submit transfer/unwrap without generating a real Groth16
+- The dApp refuses to submit transfer/withdraw without generating a real Groth16
   proof for the current note, root, nullifier, outputs, recipient, and amount.
 - `snarkjs` is vendored as a browser bundle to avoid shipping vulnerable npm
   transitive packages in the app dependency graph.
 - BN254 and Poseidon/Poseidon2 require Protocol 25+ network/runtime support.
 - Notes are stored in browser localStorage and encrypted-note payloads are demo
   JSON. Use real wallet/recipient encryption before production.
-- Wrap/unwrap amounts are public (entry/exit points)
+- Deposit/withdraw amounts are public (entry/exit points)
 
 ## Standard: SCT-01
 
@@ -278,7 +280,7 @@ nullifier = Poseidon(nullifier_key, nullifier_secret)
 
 - [x] Full BN254 Groth16 verifier contract using CAP-0074 host functions
 - [x] Poseidon BN254 incremental Merkle root using CAP-0075 host functions
-- [x] Final Circom transfer and unwrap circuit with value conservation and Merkle membership
+- [x] Final Circom transfer and withdraw circuit with value conservation and Merkle membership
 - [x] Trusted setup and generated testnet proving/verifying artifacts
 - [ ] Note encryption with recipient scanning (event-based)
 - [ ] View key / selective disclosure

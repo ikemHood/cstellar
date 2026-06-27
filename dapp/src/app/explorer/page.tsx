@@ -38,7 +38,7 @@ function nativeToDisplay(value: unknown): string {
   return String(value ?? "");
 }
 
-async function loadWrapperEvents(): Promise<ChainEvent[]> {
+async function loadAdapterEvents(): Promise<ChainEvent[]> {
   if (!config.wrapperContractId) return [];
 
   const latest = await rpc.getLatestLedger();
@@ -83,7 +83,7 @@ export default function ExplorerPage() {
     setLoading(true);
     setError(null);
 
-    loadWrapperEvents()
+    loadAdapterEvents()
       .then((loadedEvents) => {
         if (!cancelled) setEvents(loadedEvents);
       })
@@ -104,7 +104,7 @@ export default function ExplorerPage() {
       <div>
         <h1 className="text-3xl font-bold">Explorer</h1>
         <p className="text-stellar-blue mt-2">
-          Live wrapper events from testnet, paired with notes stored in this
+          Live adapter events from testnet, paired with notes stored in this
           browser.
         </p>
       </div>
@@ -121,8 +121,8 @@ export default function ExplorerPage() {
 
         {!loading && !error && events.length === 0 && (
           <p className="text-sm text-stellar-blue">
-            No wrapper events found in the recent testnet retention window.
-            Wrap or unwrap once, then return here.
+            No adapter events found in the recent testnet retention window.
+            Deposit or withdraw once, then return here.
           </p>
         )}
 
@@ -180,7 +180,7 @@ export default function ExplorerPage() {
             Visible to public
           </h3>
           <ul className="text-sm space-y-2 text-stellar-blue">
-            <li>Wrap and unwrap amounts at public entry/exit</li>
+            <li>Deposit and withdraw amounts at public entry/exit</li>
             <li>Nullifier values for double-spend prevention</li>
             <li>New commitment hashes</li>
             <li>Encrypted note hashes</li>
@@ -193,7 +193,7 @@ export default function ExplorerPage() {
         <h3 className="text-lg font-semibold mb-4">Your Local Notes</h3>
         {notes.length === 0 ? (
           <p className="text-sm text-stellar-blue">
-            No local notes in this browser for the active wrapper.
+            No local notes in this browser for the active adapter.
           </p>
         ) : (
           <div className="overflow-x-auto">

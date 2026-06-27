@@ -33,7 +33,7 @@ export default function UnwrapPage() {
     if (!address) return;
 
     setLoading(true);
-    setStatus("Preparing unwrap...");
+    setStatus("Preparing withdrawal...");
 
     try {
       const unwrapAmount = parseAmount(amount);
@@ -44,7 +44,7 @@ export default function UnwrapPage() {
 
       const unwrapRecipient = recipient || address;
 
-      // Select notes to cover unwrap amount
+      // Select notes to cover withdraw amount
       setStatus("Selecting notes...");
       const { notes: inputNotes, total } = selectNotes(
         assetId,
@@ -52,12 +52,12 @@ export default function UnwrapPage() {
       );
       if (inputNotes.length !== 1 || total !== unwrapAmount) {
         throw new Error(
-          "MVP unwrap requires one note whose amount exactly matches the unwrap amount"
+          "MVP withdrawal requires one note whose amount exactly matches the withdrawal amount"
         );
       }
       const inputNote = inputNotes[0];
       if (inputNote.leafIndex === undefined) {
-        throw new Error("Selected note has no Merkle leaf index. Re-wrap with current app version.");
+        throw new Error("Selected note has no Merkle leaf index. Deposit again with current app version.");
       }
 
       // Derive nullifiers
@@ -68,7 +68,7 @@ export default function UnwrapPage() {
       const merkleRoot = await getMerkleRoot(address);
       const merklePath = buildMerklePath(commitmentLeaves, inputNote.leafIndex);
 
-      setStatus("Generating Groth16 unwrap proof...");
+      setStatus("Generating Groth16 withdrawal proof...");
       const bindingHash = unwrapBindingHash(
         merkleRoot,
         assetId,
@@ -87,7 +87,7 @@ export default function UnwrapPage() {
         bindingHash,
       });
 
-      setStatus("Submitting unwrap transaction...");
+      setStatus("Submitting withdrawal transaction...");
       const txHash = await submitUnwrap(
         address,
         proof,
@@ -108,7 +108,7 @@ export default function UnwrapPage() {
         recipient: unwrapRecipient,
       });
       setStatus(
-        "Unwrap successful! Public tokens have been sent to the recipient."
+        "Withdrawal successful. Public tokens have been sent to the recipient."
       );
     } catch (err: any) {
       setStatus(`Error: ${err.message}`);
@@ -122,7 +122,7 @@ export default function UnwrapPage() {
       <div className="text-center py-16">
         <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
         <p className="text-stellar-blue">
-          Connect your wallet to unwrap confidential tokens.
+          Connect your wallet to withdraw confidential tokens.
         </p>
       </div>
     );
@@ -131,10 +131,10 @@ export default function UnwrapPage() {
   return (
     <div className="max-w-lg mx-auto space-y-8">
       <div>
-        <h1 className="text-3xl font-bold">Unwrap Tokens</h1>
+        <h1 className="text-3xl font-bold">Withdraw from SCT-01</h1>
         <p className="text-stellar-blue mt-2">
           Convert confidential tokens back to the original public asset.
-          The unwrap amount will be visible on-chain.
+          The withdrawal amount will be visible on-chain.
         </p>
       </div>
 
@@ -158,12 +158,12 @@ export default function UnwrapPage() {
             className="input font-mono"
           />
           <p className="text-xs text-stellar-blue mt-1">
-            Leave empty to unwrap to your own wallet.
+            Leave empty to withdraw to your own wallet.
           </p>
         </div>
 
         <div>
-          <label className="label">Amount to Unwrap</label>
+          <label className="label">Amount to Withdraw</label>
           <input
             type="number"
             step="0.0000001"
@@ -178,7 +178,7 @@ export default function UnwrapPage() {
 
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-sm">
           <p className="text-yellow-400">
-            The unwrap amount will be visible on the public chain. Internal
+            The withdrawal amount will be visible on the public chain. Internal
             confidential transfer history remains private.
           </p>
         </div>
@@ -188,7 +188,7 @@ export default function UnwrapPage() {
           disabled={loading || !amount}
           className="btn-primary w-full"
         >
-          {loading ? "Unwrapping..." : "Unwrap Tokens"}
+          {loading ? "Withdrawing..." : "Withdraw"}
         </button>
       </form>
 
@@ -206,7 +206,7 @@ export default function UnwrapPage() {
 
       {result && (
         <div className="card">
-          <h3 className="font-semibold mb-3">Unwrap Result</h3>
+          <h3 className="font-semibold mb-3">Withdrawal Result</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-stellar-blue">Amount:</span>

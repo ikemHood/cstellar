@@ -64,7 +64,7 @@ export default function TransferPage() {
       }
       const inputNote = inputNotes[0];
       if (inputNote.leafIndex === undefined) {
-        throw new Error("Selected note has no Merkle leaf index. Re-wrap with current app version.");
+        throw new Error("Selected note has no Merkle leaf index. Deposit again with current app version.");
       }
       const changeAmount = total - sendAmount;
 

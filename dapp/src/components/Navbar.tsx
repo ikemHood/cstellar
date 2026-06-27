@@ -7,10 +7,10 @@ import { ConnectButton } from "./ConnectButton";
 const navItems = [
   { href: "/", label: "Home" },
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/wrap", label: "Wrap" },
+  { href: "/wrap", label: "Deposit" },
   { href: "/transfer", label: "Transfer" },
   { href: "/receive", label: "Receive" },
-  { href: "/unwrap", label: "Unwrap" },
+  { href: "/unwrap", label: "Withdraw" },
   { href: "/explorer", label: "Explorer" },
 ];
 

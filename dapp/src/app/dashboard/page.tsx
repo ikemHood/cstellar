@@ -59,13 +59,13 @@ export default function DashboardPage() {
       {/* Quick actions */}
       <div className="flex gap-4">
         <Link href="/wrap" className="btn-primary">
-          Wrap Tokens
+          Deposit
         </Link>
         <Link href="/transfer" className="btn-secondary">
           Send Confidential
         </Link>
         <Link href="/unwrap" className="btn-secondary">
-          Unwrap
+          Withdraw
         </Link>
       </div>
 

@@ -5,7 +5,7 @@ import { Navbar } from "@/components/Navbar";
 export const metadata: Metadata = {
   title: "SCT-01 | Confidential Token Standard",
   description:
-    "Wrap any Stellar asset into a confidential token, transfer privately, and unwrap when needed.",
+    "A developer standard and kit for adding confidential transfers to Stellar apps.",
 };
 
 export default function RootLayout({
@@ -22,7 +22,7 @@ export default function RootLayout({
         </main>
         <footer className="border-t border-stellar-blue/20 mt-16 py-6 text-center text-sm text-stellar-blue">
           <p>
-            SCT-01 Confidential Token Standard &middot;{" "}
+            SCT-01 Confidential Transfer Standard &middot;{" "}
             <span className="text-yellow-400">
               NOT AUDITED - Hackathon Demo Only
             </span>

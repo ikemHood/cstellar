@@ -14,7 +14,7 @@ ZK:
 - WASM proof generation
 
 Contracts:
-- Confidential wrapper contract
+- Confidential Transfer Adapter contract
 - Verifier contract
 - Commitment/nullifier storage
 - Optional factory contract

@@ -17,7 +17,7 @@ export interface Groth16Proof {
 }
 
 function requireContracts() {
-  if (!config.wrapperContractId) throw new Error("Missing wrapper contract ID");
+  if (!config.wrapperContractId) throw new Error("Missing adapter contract ID");
   if (!config.verifierContractId) throw new Error("Missing verifier contract ID");
   if (!config.assetAddress) throw new Error("Missing asset contract ID");
 }
@@ -91,7 +91,7 @@ async function submitOperation(
 }
 
 /**
- * Build and submit a wrap transaction.
+ * Build and submit a deposit transaction through the adapter contract.
  */
 export async function submitWrap(
   sourceAddress: string,
@@ -151,7 +151,7 @@ export async function submitTransfer(
 }
 
 /**
- * Build and submit an unwrap transaction.
+ * Build and submit a withdraw transaction through the adapter contract.
  */
 export async function submitUnwrap(
   sourceAddress: string,

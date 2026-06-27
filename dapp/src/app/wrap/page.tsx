@@ -64,7 +64,7 @@ export default function WrapPage() {
         assetId,
         stroops,
         address,
-        "wrap deposit",
+        "deposit",
         leafIndex,
         false
       );
@@ -100,7 +100,7 @@ export default function WrapPage() {
         commitment: txHash,
         noteId: note.id,
       });
-      setStatus(`Wrap successful. Transaction: ${txHash}`);
+      setStatus(`Deposit successful. Transaction: ${txHash}`);
     } catch (err: any) {
       setStatus(`Error: ${err.message}`);
     } finally {
@@ -113,7 +113,7 @@ export default function WrapPage() {
       <div className="text-center py-16">
         <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
         <p className="text-stellar-blue">
-          Connect your wallet to wrap tokens.
+          Connect your wallet to deposit into SCT-01.
         </p>
       </div>
     );
@@ -122,10 +122,10 @@ export default function WrapPage() {
   return (
     <div className="max-w-lg mx-auto space-y-8">
       <div>
-        <h1 className="text-3xl font-bold">Wrap Tokens</h1>
+        <h1 className="text-3xl font-bold">Deposit to SCT-01</h1>
         <p className="text-stellar-blue mt-2">
-          Deposit public tokens into the confidential wrapper. You will receive
-          a private note representing your confidential balance.
+          Deposit public XLM into the Confidential Transfer Adapter. You will
+          receive a private note representing your confidential balance.
         </p>
       </div>
 
@@ -145,7 +145,7 @@ export default function WrapPage() {
         </div>
 
         <div>
-          <label className="label">Amount to Wrap</label>
+          <label className="label">Amount to Deposit</label>
           <input
             type="number"
             step="0.0000001"
@@ -176,7 +176,7 @@ export default function WrapPage() {
           disabled={loading || !amount}
           className="btn-primary w-full"
         >
-          {loading ? "Wrapping..." : "Wrap Tokens"}
+          {loading ? "Depositing..." : "Deposit"}
         </button>
       </form>
 
@@ -194,7 +194,7 @@ export default function WrapPage() {
 
       {result && (
         <div className="card">
-          <h3 className="font-semibold mb-2">Wrap Result</h3>
+          <h3 className="font-semibold mb-2">Deposit Result</h3>
           <div className="space-y-2 text-sm">
             <div>
               <span className="text-stellar-blue">Note ID: </span>
