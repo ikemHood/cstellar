@@ -31,3 +31,34 @@ export {
   proofPackToGroth16Proof,
 } from "./proof/generator.js";
 export { ContractClient } from "./contract/client.js";
+
+// Note storage (encrypted-at-rest persistence for spend secrets).
+export type {
+  BlobStorage,
+  NoteStorage,
+} from "./storage/types.js";
+export {
+  BACKUP_MAGIC,
+  BACKUP_VERSION,
+} from "./storage/types.js";
+export {
+  MemoryBlobStorage,
+  IndexedDbBlobStorage,
+} from "./storage/backends.js";
+export {
+  EncryptedNoteStorage,
+  EncryptedJsonStorage,
+} from "./storage/encrypted.js";
+export {
+  ENCRYPTION_KEY_BYTES,
+  SALT_BYTES,
+  SCRYPT_PARAMS,
+  deriveKeyFromPasscode,
+  deriveKeyFromSecret,
+  generateSalt,
+} from "./storage/keys.js";
+export {
+  type NoteManagerOptions,
+  serializeNote,
+  deserializeStored,
+} from "./notes/manager.js";

@@ -21,8 +21,8 @@ Browser Groth16 proof     Verifier Contract       Transfer Adapter       dApp
 | Verifier Contract | `contracts/verifier/` | BN254 Groth16 verifier using CAP-0074 host functions |
 | Final Circuit | `circuits/circom/sct01.circom` | Circom Groth16 circuit for transfer + withdraw |
 | Legacy Circuits | `circuits/transfer/`, `circuits/unwrap/` | Exploratory Noir circuits, not used by the demo verifier |
-| TypeScript SDK | `sdk/` | Note management, crypto, proof generation, contract client |
-| Demo dApp | `dapp/` | Next.js app with deposit, transfer, receive, withdraw, explorer |
+| TypeScript SDK | `sdk/` | Note management, crypto, proof generation, contract client, encrypted note storage |
+| Demo dApp | `dapp/` | Next.js app with deposit, transfer, receive, withdraw, explorer, encrypted vault |
 
 ## How It Works
 
@@ -47,6 +47,88 @@ Instead of encrypted account balances, SCT-01 uses **notes** - discrete units of
 - Transaction submitter
 - Deposit/withdraw amounts (entry/exit points)
 - Commitments and nullifiers (opaque hashes)
+
+## Note Storage
+
+Notes carry spend secrets (`nullifierKey`, `nullifierSecret`, `randomness`).
+Losing them means losing funds; leaking them means theft. The SDK and dApp
+treat note persistence as a first-class security concern.
+
+### SDK storage layer (`sdk/src/storage/`)
+
+Pluggable, runtime-agnostic, **encrypted at rest**:
+
+- `NoteStorage` / `BlobStorage` interfaces — bring your own backend.
+- `EncryptedNoteStorage` / `EncryptedJsonStorage` — wrap any `BlobStorage`
+  with XChaCha20-Poly1305. On-disk envelope:
+  `"SCT01ENC1" | version | salt(16) | nonce(24) | ciphertext+tag`.
+- `IndexedDbBlobStorage` — browser reference backend (replaces the old
+  localStorage persist; sized in MB/GB instead of 5MB and isolated per origin).
+- `MemoryBlobStorage` — in-memory fallback for tests / ephemeral sessions.
+- Key derivation: scrypt from a user passcode (`SCRYPT_PARAMS`) or HKDF-style
+  hash from an app-held secret (e.g. a wallet seed). The salt is stored with
+  the ciphertext so the same key can be re-derived on unlock.
+- Backup file format (`EncryptedNoteStorage.exportBlob` /
+  `importBlob`): `"SCT01BK1" | version | <encrypted envelope>`. Safe to copy
+  to Google Drive, iCloud, or email — the bytes are already ciphertext.
+- `NoteManager` accepts a `storage` option, autoloads on `init()`, and
+  writes through on every mutating call (`createNote`, `addReceivedNote`,
+  `markSpent`, `importNotes`, `clear`).
+
+```ts
+import {
+  NoteManager,
+  EncryptedNoteStorage,
+  IndexedDbBlobStorage,
+} from "@sct01/sdk";
+
+const backend = new IndexedDbBlobStorage();
+const storage = new EncryptedNoteStorage(backend, { passcode: "hunter2" });
+const mgr = new NoteManager(walletAddress, { storage });
+await mgr.init(); // hydrates from encrypted store
+mgr.createNote(assetId, 1000n); // persisted through encrypted store
+```
+
+### dApp vault (`dapp/src/lib/vault.ts`, `dapp/src/hooks/useVault.ts`)
+
+- Replaces the old Zustand `persist` over `localStorage`.
+- On connect, the dApp probes IndexedDB for an existing encrypted vault for the
+  connected wallet. If found, a passcode screen unlocks it; otherwise the user
+  sets a passcode (≥4 chars) and a new vault is created.
+- The full notes state (`notes` + `commitmentLeaves`) is encrypted and written
+  through on every store mutation.
+- A "Backup" button in the navbar downloads an encrypted `.sct` file the user
+  can drop into Google Drive / iCloud. A "Lock" button re-locks the vault
+  without disconnecting the wallet.
+- A `VaultGate` component hides page content until the vault is unlocked, so
+  stale secrets from a previous session never render before re-hydration.
+
+### Mobile / native wallets
+
+The SDK makes no assumptions about the underlying store. Native wallets should
+inject a backend that:
+
+- Keeps the **master encryption key** in the OS secure enclave / keychain /
+  keystore (`expo-secure-store`, iOS Keychain, Android Keystore), never
+  co-resident with ciphertext.
+- Stores the encrypted note blob in app-sandboxed storage (SQLite via
+  `@capacitor-community/sqlite` or `expo-sqlite`).
+- Implements `BlobStorage` against that backend; `EncryptedNoteStorage` does
+  the rest.
+
+### Cross-device sync (planned)
+
+The `.sct` backup format is the foundation for cross-device note access. The
+SDK exposes `exportBlob` / `importBlob` today so users can manually move
+backups between devices via Drive/iCloud. Built-in cloud sync is on the roadmap:
+
+- [ ] Google Drive adapter (Drive Picker + appdata folder)
+- [ ] iCloud adapter (native iOS Document scope)
+- [ ] Dropbox adapter
+- [ ] WebDAV / generic remote storage adapter
+
+These adapters will implement `BlobStorage` and store only ciphertext; user
+credentials never leave the device in plaintext.
 
 ## Quick Start
 
@@ -213,15 +295,16 @@ cstellar/
 │   │   ├── crypto/       # Commitment, encryption, hashing
 │   │   ├── notes/        # Note manager
 │   │   ├── proof/        # Proof generator
-│   │   └── contract/     # Contract client
+│   │   ├── contract/     # Contract client
+│   │   └── storage/      # Encrypted-at-rest note storage (IndexedDB, memory, backup)
 │   └── tests/
 ├── dapp/                 # Next.js demo dApp
 │   └── src/
 │       ├── app/          # Pages (deposit, transfer, receive, withdraw, explorer)
-│       ├── components/   # UI components
-│       ├── hooks/        # React hooks (wallet, notes)
-│       ├── store/        # Zustand state
-│       └── lib/          # Stellar SDK, crypto, contract helpers
+│       ├── components/   # UI components (incl. VaultGate, VaultLockScreen)
+│       ├── hooks/        # React hooks (wallet, notes, vault)
+│       ├── store/        # Zustand state (notes no longer persisted to localStorage)
+│       └── lib/          # Stellar SDK, crypto, contract helpers, encrypted vault
 ├── Cargo.toml            # Workspace root
 ├── prd.txt               # Product requirements
 └── stack.txt             # Tech stack
@@ -238,8 +321,16 @@ cstellar/
 - `snarkjs` is vendored as a browser bundle to avoid shipping vulnerable npm
   transitive packages in the app dependency graph.
 - BN254 and Poseidon/Poseidon2 require Protocol 25+ network/runtime support.
-- Notes are stored in browser localStorage and encrypted-note payloads are demo
-  JSON. Use real wallet/recipient encryption before production.
+- Notes are stored in an encrypted-at-rest vault (XChaCha20-Poly1305 keyed
+  from a user passcode via scrypt). The default dApp backend is IndexedDB;
+  the old localStorage-persisted note store is gone. Plaintext spend secrets
+  never touch disk. There is no passcode recovery - losing the passcode means
+  losing access to the encrypted notes (restore from a `.sct` backup if you
+  made one).
+- Encrypted-note payloads delivered on-chain via `wrap` / `conf_transfer`
+  remain demo JSON for now. The SDK's `encryptNote`/`decryptNote` helpers are
+  the production-ready recipient encryption path; wiring them into the dApp
+  receive flow is still pending.
 - Deposit/withdraw amounts are public (entry/exit points)
 
 ## Standard: SCT-01
@@ -282,12 +373,16 @@ nullifier = Poseidon(nullifier_key, nullifier_secret)
 - [x] Poseidon BN254 incremental Merkle root using CAP-0075 host functions
 - [x] Final Circom transfer and withdraw circuit with value conservation and Merkle membership
 - [x] Trusted setup and generated testnet proving/verifying artifacts
+- [x] Encrypted note storage SDK (XChaCha20-Poly1305 at rest, IndexedDB default)
+- [x] dApp passcode vault replacing localStorage note persistence
+- [x] Encrypted `.sct` backup export/import
 - [ ] Note encryption with recipient scanning (event-based)
 - [ ] View key / selective disclosure
 - [ ] Multi-asset support
 - [ ] Stealth addresses (Level 3 privacy)
 - [ ] Compliance hooks (allowlist/denylist)
 - [ ] Mobile wallet support
+- [ ] Cloud note sync (Google Drive / iCloud / Dropbox)
 - [ ] Security audit
 
 ## License

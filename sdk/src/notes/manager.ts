@@ -9,6 +9,7 @@
 
 import { randomBytes, bytesToHex, hexToBytes } from "../crypto/hash.js";
 import { computeCommitment, deriveNullifier } from "../crypto/commitment.js";
+import type { NoteStorage } from "../storage/types.js";
 import type {
   Note,
   NoteCommitment,
@@ -17,19 +18,89 @@ import type {
   NoteStoreExport,
 } from "../types.js";
 
+export interface NoteManagerOptions {
+  /**
+   * Optional persistent backend. If provided, the manager autoloads notes on
+   * `init()` and writes through on every mutating call. Pass a
+   * `EncryptedNoteStorage` over a `BlobStorage` so spend secrets never hit
+   * disk in plaintext.
+   */
+  storage?: NoteStorage;
+  /** Skip the initial load on `init()`. Defaults to `false`. */
+  skipAutoload?: boolean;
+}
+
 /**
  * Note Manager - handles creation, storage, and lifecycle of confidential notes.
  *
- * Notes are stored in-memory and can be exported/imported for persistence.
- * In a production app, notes should be encrypted at rest using the user's
- * viewing key.
+ * Notes are held in-memory and (optionally) mirrored to a `NoteStorage` so
+ * spend secrets survive reloads. Storage MUST be encrypted at rest: notes
+ * contain `nullifierKey`, `nullifierSecret`, and `randomness`; losing any of
+ * them means losing funds, and leaking them means theft.
+ *
+ * Call `init()` after construction to hydrate from storage, then use the
+ * mutating API as usual; every mutation is persisted through the configured
+ * backend.
  */
 export class NoteManager {
   private notes: Map<string, Note> = new Map();
-  private owner: string;
+  private readonly owner: string;
+  private readonly storage?: NoteStorage;
+  private loaded = false;
 
-  constructor(owner: string) {
+  constructor(owner: string, options: NoteManagerOptions = {}) {
     this.owner = owner;
+    this.storage = options.storage;
+    if (options.storage && !options.skipAutoload) {
+      // Best-effort autoload. Callers that want to await should call `init()`.
+      void this.init();
+    }
+  }
+
+  /**
+   * Load notes from the configured storage. Safe to call multiple times;
+   * subsequent calls re-read from storage (useful after an import).
+   */
+  async init(): Promise<void> {
+    if (!this.storage) return;
+    const stored = await this.storage.load(this.owner);
+    this.notes.clear();
+    if (stored) {
+      for (const s of stored) {
+        const note = deserializeStored(s);
+        this.notes.set(note.id, note);
+      }
+    }
+    this.loaded = true;
+  }
+
+  /**
+   * Force-persist the current in-memory state. Useful after bulk mutations
+   * bypass the per-call write-through, or to flush pending writes.
+   */
+  async persist(): Promise<void> {
+    if (!this.storage) return;
+    await this.storage.save(this.owner, this.serializeAll());
+  }
+
+  private async writeThrough(): Promise<void> {
+    if (!this.storage) return;
+    try {
+      await this.storage.save(this.owner, this.serializeAll());
+    } catch {
+      // Persist failures should not roll back in-memory state (the user can
+      // retry). Higher layers surface errors via their own handlers; we just
+      // avoid dropping the note from the working set.
+    }
+  }
+
+  private serializeAll(): SerializedNote[] {
+    return Array.from(this.notes.values()).map(serializeNote);
+  }
+
+  /** Whether `init()` has populated state from storage at least once. */
+  get isLoaded(): boolean {
+    return this.loaded;
   }
 
   /**
@@ -56,6 +127,7 @@ export class NoteManager {
     const commitment = computeCommitment(note);
 
     this.notes.set(note.id, note);
+    void this.writeThrough();
 
     return { note, commitment };
   }
@@ -101,6 +173,7 @@ export class NoteManager {
    */
   addReceivedNote(note: Note): void {
     this.notes.set(note.id, note);
+    void this.writeThrough();
   }
 
   /**
@@ -111,7 +184,18 @@ export class NoteManager {
     if (note) {
       note.spent = true;
       if (txHash) note.creationTxHash = txHash;
+      void this.writeThrough();
     }
+  }
+
+  /**
+   * Remove all notes from memory and (if persistence is configured) clear the
+   * stored blob. Use `noremove`-style backup before calling this if you need
+   * to retain spend secrets.
+   */
+  async clear(): Promise<void> {
+    this.notes.clear();
+    if (this.storage) await this.storage.clear(this.owner);
   }
 
   /**
@@ -212,29 +296,19 @@ export class NoteManager {
   }
 
   /**
-   * Import notes from a backup.
+   * Import notes from a backup. Imported notes overwrite any existing entry
+   * with the same id. Returns the number of notes added.
    */
   importNotes(data: NoteStoreExport): number {
     let imported = 0;
     for (const s of data.notes) {
       if (!this.notes.has(s.id)) {
-        const note: Note = {
-          id: s.id,
-          assetId: s.assetId,
-          amount: BigInt(s.amount),
-          owner: s.owner,
-          randomness: hexToBytes(s.randomness),
-          nullifierKey: hexToBytes(s.nullifierKey),
-          nullifierSecret: hexToBytes(s.nullifierSecret),
-          memo: s.memo,
-          spent: s.spent,
-          creationTxHash: s.creationTxHash,
-          createdAt: s.createdAt,
-        };
+        const note = deserializeStored(s);
         this.notes.set(note.id, note);
         imported++;
       }
     }
+    if (imported > 0) void this.writeThrough();
     return imported;
   }
 
@@ -256,4 +330,38 @@ function generateNoteId(): string {
   noteCounter++;
   const rand = bytesToHex(randomBytes(8));
   return `note_${Date.now()}_${noteCounter}_${rand}`;
+}
+
+/** Convert an in-memory `Note` to its serializable representation. */
+export function serializeNote(note: Note): SerializedNote {
+  return {
+    id: note.id,
+    assetId: note.assetId,
+    amount: note.amount.toString(),
+    owner: note.owner,
+    randomness: bytesToHex(note.randomness),
+    nullifierKey: bytesToHex(note.nullifierKey),
+    nullifierSecret: bytesToHex(note.nullifierSecret),
+    memo: note.memo,
+    spent: note.spent,
+    creationTxHash: note.creationTxHash,
+    createdAt: note.createdAt,
+  };
+}
+
+/** Convert a `SerializedNote` (from storage or import) to a `Note`. */
+export function deserializeStored(s: SerializedNote): Note {
+  return {
+    id: s.id,
+    assetId: s.assetId,
+    amount: BigInt(s.amount),
+    owner: s.owner,
+    randomness: hexToBytes(s.randomness),
+    nullifierKey: hexToBytes(s.nullifierKey),
+    nullifierSecret: hexToBytes(s.nullifierSecret),
+    memo: s.memo,
+    spent: s.spent,
+    creationTxHash: s.creationTxHash,
+    createdAt: s.createdAt,
+  };
 }

@@ -10,7 +10,7 @@ SCT-01 is a note-based confidential transfer standard:
 
 1. A user deposits public tokens into a Confidential Transfer Adapter.
 2. The adapter transfers the public asset into its vault and appends a 32-byte note commitment to a Poseidon Merkle tree.
-3. The user's browser stores the note secret material locally.
+3. The user's browser stores the note secret material locally in an encrypted-at-rest vault (see "Note Storage" below). The SDK's pluggable `NoteStorage` layer lets wallets and dApps swap IndexedDB for SQLite, secure-enclave-backed stores, or cloud-synced backends.
 4. A private transfer consumes one note, proves membership and value conservation in zero knowledge, publishes one nullifier, and appends two output commitments: recipient output and sender change.
 5. A withdrawal consumes one note, proves ownership and membership in zero knowledge, publishes one nullifier, and transfers public tokens from the adapter vault to a recipient.
 
@@ -168,9 +168,14 @@ Important files:
 - `dapp/src/lib/crypto.ts`: thin dApp-compatible exports from `@sct01/sdk` for SHA-256, random bytes, Poseidon hashing, address-to-field, commitment/nullifier, and binding hash helpers.
 - `dapp/src/lib/proofs.ts`: loads snarkjs, builds Merkle paths, generates transfer/withdraw Groth16 proofs, converts snarkjs proof JSON to Soroban BN254 proof bytes.
 - `dapp/src/lib/contract/index.ts`: thin adapter over `sdk/src/contract/client.ts`, preserving existing page imports while delegating simulation, signing handoff, submission, and polling to the SDK.
-- `dapp/src/store/notes.ts`: persisted local note store.
+- `dapp/src/store/notes.ts`: in-memory note state. Persistence is handled by the encrypted vault in `dapp/src/lib/vault.ts`; the old Zustand `persist` over `localStorage` is gone.
+- `dapp/src/lib/vault.ts`: encrypted notes vault - wraps SDK `EncryptedJsonStorage` over IndexedDB, keyed from a user passcode via scrypt. Exposes unlock/create/lock, backup export, and backup import.
 - `dapp/src/hooks/useNotes.ts`: note creation, note selection, balance, nullifier derivation.
+- `dapp/src/hooks/useVault.ts`: vault lifecycle hook - probes for an existing vault on connect, drives unlock / create, hydrates the notes store, and exposes backup export.
 - `dapp/src/hooks/useWallet.ts`: Freighter connection/signing.
+- `dapp/src/components/VaultGate.tsx`: wraps app content, shows `VaultLockScreen` until the vault is unlocked so stale secrets from a previous session never render before re-hydration.
+- `dapp/src/components/VaultLockScreen.tsx`: first-run passcode setup and per-session unlock UI.
+- `dapp/src/components/ConnectButton.tsx`: adds Backup + Lock controls when the vault is unlocked.
 - `dapp/src/app/wrap/page.tsx`: deposit flow.
 - `dapp/src/app/transfer/page.tsx`: private transfer flow.
 - `dapp/src/app/unwrap/page.tsx`: withdraw flow.
@@ -178,7 +183,14 @@ Important files:
 - `dapp/src/app/receive/page.tsx`: receive-address UI and intended receive flow explanation.
 - `dapp/src/app/explorer/page.tsx`: demo comparison of public chain view vs participant view.
 
-The dApp note store is local browser state. If local storage is cleared, the user loses access to demo notes unless they backed up the note secrets. There is no production key management or note recovery yet.
+The dApp note store is an in-memory Zustand store write-through-mirrored to an
+encrypted vault on IndexedDB. Notes are encrypted at rest with
+XChaCha20-Poly1305 keyed from a user passcode via scrypt. Plaintext spend
+secrets never touch disk. Recovery requires the passcode and (optionally) a
+`.sct` backup file exported via the navbar Backup button. Cloud-synced
+backups (Google Drive / iCloud) are a planned follow-up; the backup blob
+format is already ciphertext so those adapters will only move bytes, never
+plaintext.
 
 ## SDK
 
@@ -189,7 +201,11 @@ The SDK contains reusable TypeScript pieces:
 - `sdk/src/crypto/hash.ts`: byte/field/hash utilities.
 - `sdk/src/crypto/commitment.ts`: note commitment, nullifier derivation, address-to-field conversion, and transfer/withdraw binding hashes matching the circuit and adapter.
 - `sdk/src/crypto/encryption.ts`: X25519 plus ChaCha20-Poly1305 note encryption helpers.
-- `sdk/src/notes/manager.ts`: in-memory note manager with export/import helpers.
+- `sdk/src/notes/manager.ts`: in-memory note manager with export/import helpers. Accepts an optional `NoteStorage`; when provided, autoloads on `init()` and writes through on every mutation (`createNote`, `addReceivedNote`, `markSpent`, `importNotes`, `clear`).
+- `sdk/src/storage/types.ts`: `BlobStorage` and `NoteStorage` interfaces, backup format constants.
+- `sdk/src/storage/backends.ts`: `MemoryBlobStorage` (tests/ephemeral), `IndexedDbBlobStorage` (browser reference).
+- `sdk/src/storage/keys.ts`: scrypt-from-passcode and HKDF-style-from-secret key derivation, salt helpers.
+- `sdk/src/storage/encrypted.ts`: `EncryptedNoteStorage` and `EncryptedJsonStorage` - XChaCha20-Poly1305 envelope around any `BlobStorage`. Exposes `exportBlob` / `importBlob` for `.sct` backup files.
 - `sdk/src/proof/generator.ts`: proof-pack conversion and public signal validation. It intentionally does not generate fake proofs.
 - `sdk/src/contract/client.ts`: live adapter client for deposit, transfer, withdraw, metadata/state reads, and event fetching. It supports browser wallet signers and Node keypair convenience wrappers.
 - `sdk/src/types.ts`: shared note/proof/config types.
