@@ -9,7 +9,7 @@ import { getNoteCount, submitWrap } from "@/lib/contract";
 
 export default function WrapPage() {
   const { address, connected, sign } = useWallet();
-  const { createNote } = useNotes();
+  const { addCommitmentLeaf, addNote, createNote } = useNotes();
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -43,7 +43,8 @@ export default function WrapPage() {
         stroops,
         address,
         "wrap deposit",
-        leafIndex
+        leafIndex,
+        false
       );
 
       setStatus("Note created. Preparing transaction...");
@@ -70,6 +71,8 @@ export default function WrapPage() {
         encryptedNote,
         (xdr) => sign(xdr, config.networkPassphrase)
       );
+      addNote({ ...note, creationTxHash: txHash });
+      addCommitmentLeaf(note.commitment, leafIndex);
 
       setResult({
         commitment: txHash,

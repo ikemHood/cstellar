@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { config } from "@/lib/stellar";
 
 export interface StoredNote {
   id: string;
@@ -58,6 +59,6 @@ export const useNotesStore = create<NotesState>()(
         })),
       clearNotes: () => set({ notes: [], commitmentLeaves: [] }),
     }),
-    { name: "sct01-notes" }
+    { name: `sct01-notes-${config.wrapperContractId || "local"}` }
   )
 );
