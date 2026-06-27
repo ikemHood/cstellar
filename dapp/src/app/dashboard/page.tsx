@@ -41,7 +41,7 @@ export default function DashboardPage() {
             Confidential Balance
           </div>
           <div className="text-3xl font-bold text-stellar-accent">
-            {formatAmount(confBalance)} cUSDC
+            {formatAmount(confBalance)} cXLM
           </div>
         </div>
         <div className="card">

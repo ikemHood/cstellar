@@ -384,8 +384,8 @@ stellar contract invoke \
   --admin "$ADMIN" \
   --asset "$ASSET_ID" \
   --verifier "$VERIFIER_ID" \
-  --name cUSDC \
-  --symbol cUSDC \
+  --name cXLM \
+  --symbol cXLM \
   --decimals 7
 ```
 

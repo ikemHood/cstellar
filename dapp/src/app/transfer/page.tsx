@@ -223,7 +223,7 @@ export default function TransferPage() {
           Confidential Balance
         </div>
         <div className="text-2xl font-bold text-stellar-accent">
-          {formatAmount(balance)} cUSDC
+          {formatAmount(balance)} cXLM
         </div>
       </div>
 
@@ -295,11 +295,11 @@ export default function TransferPage() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-stellar-blue">Sent:</span>
-              <span>{result.sentAmount} cUSDC</span>
+              <span>{result.sentAmount} cXLM</span>
             </div>
             <div className="flex justify-between">
               <span className="text-stellar-blue">Change:</span>
-              <span>{result.changeAmount} cUSDC</span>
+              <span>{result.changeAmount} cXLM</span>
             </div>
             <div className="mt-3 pt-3 border-t border-stellar-blue/20">
               <div className="text-stellar-blue text-xs mb-1">

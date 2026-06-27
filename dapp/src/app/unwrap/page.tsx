@@ -143,7 +143,7 @@ export default function UnwrapPage() {
           Confidential Balance
         </div>
         <div className="text-2xl font-bold text-stellar-accent">
-          {formatAmount(balance)} cUSDC
+          {formatAmount(balance)} cXLM
         </div>
       </div>
 
@@ -210,7 +210,7 @@ export default function UnwrapPage() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-stellar-blue">Amount:</span>
-              <span>{result.amount} USDC</span>
+              <span>{result.amount} XLM</span>
             </div>
             <div className="flex justify-between">
               <span className="text-stellar-blue">Recipient:</span>

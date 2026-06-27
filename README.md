@@ -101,7 +101,7 @@ stellar contract invoke \
   --admin alice \
   --asset ASSET_SAC_ADDRESS \
   --verifier VERIFIER_ID \
-  --name cUSDC --symbol cUSDC --decimals 7
+  --name cXLM --symbol cXLM --decimals 7
 ```
 
 For the dApp demo, set `NEXT_PUBLIC_ASSET_ADDRESS` to the SAC contract ID,

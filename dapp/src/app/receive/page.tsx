@@ -80,7 +80,7 @@ export default function ReceivePage() {
                           {(
                             Number(BigInt(note.amount)) / 1e7
                           ).toLocaleString()}{" "}
-                          cUSDC
+                          cXLM
                         </div>
                         <div className="text-xs text-stellar-blue font-mono">
                           {note.id.slice(0, 20)}...

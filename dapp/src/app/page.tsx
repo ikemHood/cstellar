@@ -28,7 +28,7 @@ export default function HomePage() {
           <div className="text-4xl mb-4">1</div>
           <h3 className="text-xl font-semibold mb-2">Wrap</h3>
           <p className="text-stellar-blue">
-            Deposit public tokens (USDC, XLM) into the wrapper contract.
+            Deposit public XLM into the wrapper contract.
             Receive a private confidential note.
           </p>
         </div>

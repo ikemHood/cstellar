@@ -46,7 +46,7 @@ function NoteCard({ note }: { note: StoredNote }) {
         <div className="font-mono text-sm text-stellar-blue">
           {note.id.slice(0, 20)}...
         </div>
-        <div className="text-lg font-semibold">{amount} cUSDC</div>
+        <div className="text-lg font-semibold">{amount} cXLM</div>
         {note.memo && (
           <div className="text-xs text-stellar-blue">{note.memo}</div>
         )}

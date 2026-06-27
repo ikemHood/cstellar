@@ -45,8 +45,8 @@ export default function ExplorerPage() {
       <div className="card bg-stellar-blue/10">
         <h3 className="font-semibold mb-2">Demo Scenario</h3>
         <p className="text-sm text-stellar-blue">
-          Alice has 100 cUSDC. She sends 17.5 cUSDC to Bob. Bob later unwraps
-          5 cUSDC back to public USDC.
+          Alice has 100 cXLM. She sends 17.5 cXLM to Bob. Bob later unwraps
+          5 cXLM back to public XLM.
         </p>
       </div>
 
@@ -120,27 +120,27 @@ export default function ExplorerPage() {
             <div>
               <div className="text-stellar-blue text-xs">Sent Amount:</div>
               <div className="text-xl font-bold text-blue-400">
-                {scenario.alice.sent} cUSDC
+                {scenario.alice.sent} cXLM
               </div>
             </div>
             <div>
               <div className="text-stellar-blue text-xs">Change:</div>
               <div className="text-lg font-semibold">
-                {scenario.alice.change} cUSDC
+                {scenario.alice.change} cXLM
               </div>
             </div>
             <div>
               <div className="text-stellar-blue text-xs">
                 Previous Balance:
               </div>
-              <div>{scenario.alice.initialBalance} cUSDC</div>
+              <div>{scenario.alice.initialBalance} cXLM</div>
             </div>
             <div>
               <div className="text-stellar-blue text-xs">
                 New Balance:
               </div>
               <div className="text-lg font-semibold text-stellar-accent">
-                {scenario.alice.change} cUSDC
+                {scenario.alice.change} cXLM
               </div>
             </div>
             <div className="pt-3 border-t border-stellar-blue/20">
@@ -168,7 +168,7 @@ export default function ExplorerPage() {
                 Received Amount:
               </div>
               <div className="text-xl font-bold text-green-400">
-                {scenario.bob.received} cUSDC
+                {scenario.bob.received} cXLM
               </div>
             </div>
             <div>
@@ -187,7 +187,7 @@ export default function ExplorerPage() {
               </div>
               <ul className="text-xs mt-1 space-y-1">
                 <li>Transfer privately to someone else</li>
-                <li>Unwrap to public USDC</li>
+                <li>Unwrap to public XLM</li>
                 <li>Export receipt for compliance</li>
               </ul>
             </div>
@@ -206,8 +206,8 @@ export default function ExplorerPage() {
               Hidden from public
             </h4>
             <ul className="text-sm space-y-1 text-stellar-blue">
-              <li>17.5 cUSDC was sent to Bob</li>
-              <li>82.5 cUSDC is Alice&apos;s change</li>
+              <li>17.5 cXLM was sent to Bob</li>
+              <li>82.5 cXLM is Alice&apos;s change</li>
               <li>Alice&apos;s remaining balance</li>
               <li>Bob&apos;s received amount</li>
               <li>The link between commitments and amounts</li>

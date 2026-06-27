@@ -108,7 +108,7 @@ export default function WrapPage() {
         <div>
           <label className="label">Asset</label>
           <div className="input bg-stellar-blue/20 cursor-not-allowed">
-            cUSDC (Confidential USDC)
+            cXLM (Confidential XLM)
           </div>
         </div>
 
@@ -129,12 +129,12 @@ export default function WrapPage() {
         <div className="bg-stellar-blue/10 rounded-lg p-4 text-sm">
           <div className="flex justify-between mb-2">
             <span className="text-stellar-blue">You deposit:</span>
-            <span>{amount || "0"} USDC (public)</span>
+            <span>{amount || "0"} XLM (public)</span>
           </div>
           <div className="flex justify-between">
             <span className="text-stellar-blue">You receive:</span>
             <span className="text-stellar-accent">
-              {amount || "0"} cUSDC (confidential)
+              {amount || "0"} cXLM (confidential)
             </span>
           </div>
         </div>

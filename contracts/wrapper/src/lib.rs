@@ -561,19 +561,21 @@ fn insert_commitment(env: &Env, commitment: &BytesN<32>) -> Result<(), ContractE
 
     let mut index = count;
     let mut current = commitment.clone();
+    let mut zero = BytesN::from_array(env, &[0u8; 32]);
     for level in 0..TREE_DEPTH {
         let subtree_key = DataKey::FilledSubtree(level);
         if index % 2 == 0 {
             env.storage().instance().set(&subtree_key, &current);
-            current = hash_pair(env, &current, &zero_at_level(env, level));
+            current = hash_pair(env, &current, &zero);
         } else {
             let left: BytesN<32> = env
                 .storage()
                 .instance()
                 .get(&subtree_key)
-                .unwrap_or(zero_at_level(env, level));
+                .unwrap_or(zero.clone());
             current = hash_pair(env, &left, &current);
         }
+        zero = hash_pair(env, &zero, &zero);
         index /= 2;
     }
 
