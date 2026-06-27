@@ -35,7 +35,7 @@ The current MVP supports:
 - `dapp`: Next.js wallet UI and browser proof generation.
 - `dapp/public/circuits`: public WASM/zkey/verifying key consumed by the browser.
 - `dapp/public/vendor/snarkjs.min.js`: vendored snarkjs browser bundle.
-- `sdk`: TypeScript SDK for notes, commitments, encryption helpers, and partial contract tooling.
+- `sdk`: TypeScript SDK for notes, commitments, binding hashes, encryption helpers, proof packing, and live adapter contract calls.
 - `scripts/build-circom-artifacts.sh`: rebuilds Circom proving artifacts.
 - `scripts/pack-snarkjs-proof.mjs`: helper for converting static snarkjs proof output.
 - `dapp/scripts/init-verifier-from-vk.mjs`: initializes the verifier contract from `verification_key.json`.
@@ -53,7 +53,7 @@ flowchart LR
   Adapter --> Poseidon["CAP-0075 Poseidon via soroban-poseidon"]
 ```
 
-The dApp is the canonical live client right now. It computes notes, Merkle paths, binding hashes, Groth16 proofs, and transaction arguments. It does not currently import `@sct01/sdk`; it uses inlined SDK-equivalent helpers that should be unified with the package next. The adapter validates public consistency and proof binding. The verifier performs the Groth16 pairing check using the stored verification key.
+The SDK now owns the reusable crypto helpers and live adapter transaction client. The dApp consumes `@sct01/sdk` for commitment/nullifier/binding helpers and deposit/transfer/withdraw contract calls, while it still owns browser-specific Groth16 proof orchestration, local note storage UX, and Freighter signing. The adapter validates public consistency and proof binding. The verifier performs the Groth16 pairing check using the stored verification key.
 
 ## On-Chain Contracts
 
@@ -160,14 +160,14 @@ The current trusted setup is deterministic demo setup. It is acceptable for hack
 
 Main folder: `dapp`
 
-The dApp is a Next.js client app. It uses Freighter for wallet signing, Stellar SDK/RPC for contract calls, Zustand local storage for notes, `poseidon-lite` for browser hashes, and snarkjs for proof generation.
+The dApp is a Next.js client app. It uses Freighter for wallet signing, `@sct01/sdk` for shared crypto and adapter contract calls, Zustand local storage for notes, and snarkjs for browser proof generation.
 
 Important files:
 
 - `dapp/src/lib/stellar.ts`: network, RPC, Horizon, contract IDs, amount parsing/formatting.
-- `dapp/src/lib/crypto.ts`: SHA-256, random bytes, Poseidon hashing, address-to-field, commitment/nullifier/binding hash helpers.
+- `dapp/src/lib/crypto.ts`: thin dApp-compatible exports from `@sct01/sdk` for SHA-256, random bytes, Poseidon hashing, address-to-field, commitment/nullifier, and binding hash helpers.
 - `dapp/src/lib/proofs.ts`: loads snarkjs, builds Merkle paths, generates transfer/withdraw Groth16 proofs, converts snarkjs proof JSON to Soroban BN254 proof bytes.
-- `dapp/src/lib/contract/index.ts`: builds, simulates, assembles, signs, submits, and polls adapter contract transactions.
+- `dapp/src/lib/contract/index.ts`: thin adapter over `sdk/src/contract/client.ts`, preserving existing page imports while delegating simulation, signing handoff, submission, and polling to the SDK.
 - `dapp/src/store/notes.ts`: persisted local note store.
 - `dapp/src/hooks/useNotes.ts`: note creation, note selection, balance, nullifier derivation.
 - `dapp/src/hooks/useWallet.ts`: Freighter connection/signing.
@@ -187,14 +187,14 @@ Main folder: `sdk`
 The SDK contains reusable TypeScript pieces:
 
 - `sdk/src/crypto/hash.ts`: byte/field/hash utilities.
-- `sdk/src/crypto/commitment.ts`: note commitment and nullifier derivation matching the circuit.
+- `sdk/src/crypto/commitment.ts`: note commitment, nullifier derivation, address-to-field conversion, and transfer/withdraw binding hashes matching the circuit and adapter.
 - `sdk/src/crypto/encryption.ts`: X25519 plus ChaCha20-Poly1305 note encryption helpers.
 - `sdk/src/notes/manager.ts`: in-memory note manager with export/import helpers.
 - `sdk/src/proof/generator.ts`: proof-pack conversion and public signal validation. It intentionally does not generate fake proofs.
-- `sdk/src/contract/client.ts`: high-level contract client scaffold.
+- `sdk/src/contract/client.ts`: live adapter client for deposit, transfer, withdraw, metadata/state reads, and event fetching. It supports browser wallet signers and Node keypair convenience wrappers.
 - `sdk/src/types.ts`: shared note/proof/config types.
 
-Important gap: `sdk/src/contract/client.ts` is not fully aligned with the latest adapter proof argument shape. The dApp does not consume the SDK package yet; it carries copied/inlined crypto, proof, note, and contract helpers. Contributors should update the SDK client to match `dapp/src/lib/contract/index.ts`, then replace the duplicated dApp helpers with SDK imports.
+Current boundary: reusable crypto and contract calls live in the SDK; browser-only proof generation still lives in `dapp/src/lib/proofs.ts` because it loads `/public` circuit artifacts and the vendored snarkjs browser bundle. The SDK proof module only validates and packs real snarkjs proof output; it does not fabricate proofs.
 
 ## End-To-End Flows
 
@@ -459,7 +459,6 @@ Main risks and gaps:
 - One-input/two-output shape leaks some structure and limits usability.
 - Withdraw requires exact note amount.
 - Merkle paths are built from local leaves. A robust wallet needs chain event indexing and tree reconstruction.
-- SDK contract client is stale relative to current contract argument shapes.
 - The `verify_proof_binding` comment in the adapter mentions earlier MVP validation but the implementation now calls the verifier. Update the comment before public release to avoid confusing auditors.
 - No frontend hardening beyond normal Next.js defaults. Treat the app as demo UI.
 - No rate limits or backend because there is no backend. RPC abuse and frontend availability depend on provider limits.
@@ -468,13 +467,13 @@ Main risks and gaps:
 
 Use this map when changing behavior:
 
-- Change note commitment formula: update `circuits/circom/sct01.circom`, `contracts/wrapper/src/lib.rs` if public bindings/tree change, `dapp/src/lib/crypto.ts`, `sdk/src/crypto/commitment.ts`, and tests.
-- Change transfer public data: update circuit binding, adapter `transfer_binding_hash`, dApp `transferBindingHash`, proof inputs, and contract call encoding.
-- Change withdraw public data: update circuit binding, adapter `unwrap_binding_hash`, dApp `unwrapBindingHash`, proof inputs, and contract call encoding.
+- Change note commitment formula: update `circuits/circom/sct01.circom`, `contracts/wrapper/src/lib.rs` if public bindings/tree change, `sdk/src/crypto/commitment.ts`, and tests.
+- Change transfer public data: update circuit binding, adapter `transfer_binding_hash`, SDK `transferBindingHash`, dApp proof inputs, and SDK contract call encoding.
+- Change withdraw public data: update circuit binding, adapter `unwrap_binding_hash`, SDK `unwrapBindingHash`, dApp proof inputs, and SDK contract call encoding.
 - Add multi-input transfer: update circuit dimensions, adapter `MAX_NULLIFIERS`, public input checks, binding hash, dApp note selection/proof inputs, SDK types, tests.
 - Add partial withdrawal: model it as note spend plus public output plus change commitment, or add a new action type and circuit constraints.
 - Add recipient receive flow: wire `sdk/src/crypto/encryption.ts` into dApp, include recipient encryption public key, scan adapter events, decrypt candidate payloads, import received notes, and rebuild local Merkle leaves.
-- Align SDK live client: port `dapp/src/lib/contract/index.ts` proof maps and Groth16 proof struct into `sdk/src/contract/client.ts`.
+- Keep dApp SDK integration thin: `dapp/src/lib/crypto.ts` and `dapp/src/lib/contract/index.ts` should stay wrappers over `@sct01/sdk`, not forked implementations.
 - Improve testnet deployment: add repeatable deploy scripts that build, deploy, initialize verifier, initialize adapter, and write `.env.local`.
 
 ## Validation Commands
@@ -524,7 +523,7 @@ What remains before production-grade confidential tokens:
 - Robust indexer-backed Merkle tree reconstruction.
 - Multi-note spends.
 - Partial withdrawal/change.
-- SDK contract client alignment.
+- Move browser proof orchestration into SDK once artifact loading can be configured cleanly for apps and wallets.
 - Wallet-grade key storage and backup.
 - Better contract integration tests with realistic verifier fixtures.
 - Operational deployment scripts and CI.

@@ -53,7 +53,7 @@ Instead of encrypted account balances, SCT-01 uses **notes** - discrete units of
 ### Prerequisites
 
 - Rust + `wasm32v1-none` target
-- Node.js 20+
+- Node.js 22+ (required by `@stellar/stellar-sdk` 16.x)
 - Stellar CLI 26+
 - Circom 2.1+ for rebuilding Groth16 artifacts
 - Noir (`nargo`) only for the legacy exploratory circuits

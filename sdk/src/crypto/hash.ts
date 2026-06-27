@@ -73,6 +73,13 @@ export function bytesToBigint(bytes: Uint8Array): bigint {
 }
 
 /**
+ * Convert bytes to a BN254 field element.
+ */
+export function fieldFromBytes(bytes: Uint8Array): bigint {
+  return toField(bytesToBigint(bytes));
+}
+
+/**
  * Convert a hex string to Uint8Array.
  */
 export function hexToBytes(hex: string): Uint8Array {

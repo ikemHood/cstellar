@@ -1,21 +1,49 @@
 // SCT-01 SDK - Contract Client
 //
-// High-level client for interacting with the SCT-01 wrapper and verifier
-// contracts via Stellar RPC. Handles transaction building, simulation,
-// signing, and submission.
+// Client for the SCT-01 Confidential Transfer Adapter and verifier contracts.
+// Matches the live dApp transaction shape used on testnet.
 
 import * as StellarSdk from "@stellar/stellar-sdk";
-import type {
-  NetworkConfig,
-  TransferPublicInputs,
-  UnwrapPublicInputs,
-  Proof,
-  ConfidentialTokenMetadata,
-} from "../types.js";
-import { bytesToHex } from "../crypto/hash.js";
+import type { NetworkConfig, ConfidentialTokenMetadata } from "../types.js";
+import type { Groth16Proof } from "../proof/generator.js";
+import { sha256 } from "../crypto/hash.js";
+
+export type SignTransaction = (xdr: string) => Promise<string>;
+
+function scBytes(bytes: Uint8Array): StellarSdk.xdr.ScVal {
+  return StellarSdk.nativeToScVal(bytes, { type: "bytes" });
+}
+
+function scVec(values: StellarSdk.xdr.ScVal[]): StellarSdk.xdr.ScVal {
+  return StellarSdk.xdr.ScVal.scvVec(values);
+}
+
+function scMap(
+  entries: Array<[string, StellarSdk.xdr.ScVal]>
+): StellarSdk.xdr.ScVal {
+  return StellarSdk.xdr.ScVal.scvMap(
+    entries
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(
+        ([key, val]) =>
+          new StellarSdk.xdr.ScMapEntry({
+            key: StellarSdk.xdr.ScVal.scvSymbol(key),
+            val,
+          })
+      )
+  );
+}
+
+function scGroth16Proof(proof: Groth16Proof): StellarSdk.xdr.ScVal {
+  return scMap([
+    ["a", scBytes(proof.a)],
+    ["b", scBytes(proof.b)],
+    ["c", scBytes(proof.c)],
+  ]);
+}
 
 /**
- * Contract Client - wraps Stellar SDK interactions with SCT-01 contracts.
+ * Contract client for SCT-01 adapter calls.
  */
 export class ContractClient {
   private rpc: StellarSdk.rpc.Server;
@@ -29,7 +57,105 @@ export class ContractClient {
   }
 
   /**
-   * Wrap: deposit public tokens and create a confidential note.
+   * Deposit: lock public tokens and create a confidential note.
+   */
+  async deposit(
+    sourceAddress: string,
+    amount: bigint,
+    commitment: Uint8Array,
+    encryptedNote: Uint8Array,
+    signTransaction: SignTransaction
+  ): Promise<string> {
+    const contract = new StellarSdk.Contract(this.config.wrapperContractId);
+
+    return this.submitOperation(
+      sourceAddress,
+      contract.call(
+        "wrap",
+        StellarSdk.Address.fromString(sourceAddress).toScVal(),
+        StellarSdk.nativeToScVal(amount, { type: "i128" }),
+        scBytes(commitment),
+        scBytes(encryptedNote)
+      ),
+      signTransaction
+    );
+  }
+
+  /**
+   * Confidential transfer: spend one note, create recipient and change notes.
+   */
+  async transfer(
+    sourceAddress: string,
+    proof: Groth16Proof,
+    merkleRoot: Uint8Array,
+    assetId: string,
+    nullifiers: Uint8Array[],
+    outputCommitments: Uint8Array[],
+    encryptedNotes: Uint8Array[],
+    signTransaction: SignTransaction
+  ): Promise<string> {
+    const contract = new StellarSdk.Contract(this.config.wrapperContractId);
+    const encryptedNoteHashes = encryptedNotes.map((note) => sha256(note));
+
+    const publicInputs = scMap([
+      ["merkle_root", scBytes(merkleRoot)],
+      ["asset_id", StellarSdk.Address.fromString(assetId).toScVal()],
+      ["output_commitments", scVec(outputCommitments.map(scBytes))],
+      ["encrypted_note_hashes", scVec(encryptedNoteHashes.map(scBytes))],
+    ]);
+
+    return this.submitOperation(
+      sourceAddress,
+      contract.call(
+        "confidential_transfer",
+        scGroth16Proof(proof),
+        publicInputs,
+        scVec(nullifiers.map(scBytes)),
+        scVec(outputCommitments.map(scBytes)),
+        scVec(encryptedNotes.map(scBytes))
+      ),
+      signTransaction
+    );
+  }
+
+  /**
+   * Withdraw: spend a confidential note and release public tokens.
+   */
+  async withdraw(
+    sourceAddress: string,
+    proof: Groth16Proof,
+    nullifier: Uint8Array,
+    recipient: string,
+    amount: bigint,
+    merkleRoot: Uint8Array,
+    assetId: string,
+    signTransaction: SignTransaction
+  ): Promise<string> {
+    const contract = new StellarSdk.Contract(this.config.wrapperContractId);
+
+    const publicInputs = scMap([
+      ["merkle_root", scBytes(merkleRoot)],
+      ["asset_id", StellarSdk.Address.fromString(assetId).toScVal()],
+      ["recipient", StellarSdk.Address.fromString(recipient).toScVal()],
+      ["amount", StellarSdk.nativeToScVal(amount, { type: "i128" })],
+    ]);
+
+    return this.submitOperation(
+      sourceAddress,
+      contract.call(
+        "unwrap",
+        scGroth16Proof(proof),
+        publicInputs,
+        scBytes(nullifier),
+        StellarSdk.Address.fromString(recipient).toScVal(),
+        StellarSdk.nativeToScVal(amount, { type: "i128" })
+      ),
+      signTransaction
+    );
+  }
+
+  /**
+   * Keypair convenience wrapper for Node scripts.
    */
   async wrap(
     sourceKeypair: StellarSdk.Keypair,
@@ -37,120 +163,67 @@ export class ContractClient {
     commitment: Uint8Array,
     encryptedNote: Uint8Array
   ): Promise<string> {
-    const contract = new StellarSdk.Contract(this.config.wrapperContractId);
-
-    const tx = await this.buildContractTx(
+    return this.deposit(
       sourceKeypair.publicKey(),
-      contract.call(
-        "wrap",
-        StellarSdk.Address.fromString(sourceKeypair.publicKey()).toScVal(),
-        StellarSdk.nativeToScVal(amount, { type: "i128" }),
-        StellarSdk.nativeToScVal(commitment, { type: "bytesn" }),
-        StellarSdk.nativeToScVal(encryptedNote, { type: "bytes" })
-      )
+      amount,
+      commitment,
+      encryptedNote,
+      async (xdr) => this.signXdr(xdr, sourceKeypair)
     );
-
-    return this.signAndSubmit(tx, sourceKeypair);
   }
 
   /**
-   * Confidential transfer: spend notes, create new notes.
+   * Keypair convenience wrapper for Node scripts.
    */
   async confidentialTransfer(
     sourceKeypair: StellarSdk.Keypair,
-    proof: Proof,
-    publicInputs: TransferPublicInputs,
+    proof: Groth16Proof,
+    merkleRoot: Uint8Array,
+    assetId: string,
     nullifiers: Uint8Array[],
     outputCommitments: Uint8Array[],
     encryptedNotes: Uint8Array[]
   ): Promise<string> {
-    const contract = new StellarSdk.Contract(this.config.wrapperContractId);
-
-    // Build public inputs struct
-    const publicInputsVal = StellarSdk.nativeToScVal(
-      {
-        merkle_root: publicInputs.merkleRoot,
-        asset_id: StellarSdk.Address.fromString(publicInputs.assetId).toScVal(),
-        output_commitments: publicInputs.outputCommitments,
-        encrypted_note_hashes: publicInputs.encryptedNoteHashes,
-      },
-      {
-        type: {
-          merkle_root: ["symbol", null],
-          asset_id: ["symbol", null],
-          output_commitments: ["symbol", null],
-          encrypted_note_hashes: ["symbol", null],
-        },
-      }
-    );
-
-    const tx = await this.buildContractTx(
+    return this.transfer(
       sourceKeypair.publicKey(),
-      contract.call(
-        "confidential_transfer",
-        StellarSdk.nativeToScVal(proof.data, { type: "bytes" }),
-        publicInputsVal,
-        StellarSdk.nativeToScVal(nullifiers, { type: "bytesn" }),
-        StellarSdk.nativeToScVal(outputCommitments, { type: "bytesn" }),
-        StellarSdk.nativeToScVal(encryptedNotes, { type: "bytes" })
-      )
+      proof,
+      merkleRoot,
+      assetId,
+      nullifiers,
+      outputCommitments,
+      encryptedNotes,
+      async (xdr) => this.signXdr(xdr, sourceKeypair)
     );
-
-    return this.signAndSubmit(tx, sourceKeypair);
   }
 
   /**
-   * Unwrap: spend a confidential note, receive public tokens.
+   * Keypair convenience wrapper for Node scripts.
    */
   async unwrap(
     sourceKeypair: StellarSdk.Keypair,
-    proof: Proof,
-    publicInputs: UnwrapPublicInputs,
+    proof: Groth16Proof,
     nullifier: Uint8Array,
     recipient: string,
-    amount: bigint
+    amount: bigint,
+    merkleRoot: Uint8Array,
+    assetId: string
   ): Promise<string> {
-    const contract = new StellarSdk.Contract(this.config.wrapperContractId);
-
-    const publicInputsVal = StellarSdk.nativeToScVal(
-      {
-        merkle_root: publicInputs.merkleRoot,
-        asset_id: StellarSdk.Address.fromString(publicInputs.assetId).toScVal(),
-        recipient: StellarSdk.Address.fromString(recipient).toScVal(),
-        amount: StellarSdk.nativeToScVal(amount, { type: "i128" }),
-      },
-      {
-        type: {
-          merkle_root: ["symbol", null],
-          asset_id: ["symbol", null],
-          recipient: ["symbol", null],
-          amount: ["i128", null],
-        },
-      }
-    );
-
-    const tx = await this.buildContractTx(
+    return this.withdraw(
       sourceKeypair.publicKey(),
-      contract.call(
-        "unwrap",
-        StellarSdk.nativeToScVal(proof.data, { type: "bytes" }),
-        publicInputsVal,
-        StellarSdk.nativeToScVal(nullifier, { type: "bytesn" }),
-        StellarSdk.Address.fromString(recipient).toScVal(),
-        StellarSdk.nativeToScVal(amount, { type: "i128" })
-      )
+      proof,
+      nullifier,
+      recipient,
+      amount,
+      merkleRoot,
+      assetId,
+      async (xdr) => this.signXdr(xdr, sourceKeypair)
     );
-
-    return this.signAndSubmit(tx, sourceKeypair);
   }
 
-  /**
-   * Query: check if a nullifier has been spent.
-   */
-  async isSpent(nullifier: Uint8Array): Promise<boolean> {
+  async isSpent(sourceAddress: string, nullifier: Uint8Array): Promise<boolean> {
     try {
-      const result = await this.invokeViewFunction("is_spent", [
-        StellarSdk.nativeToScVal(nullifier, { type: "bytesn" }),
+      const result = await this.invokeViewFunction(sourceAddress, "is_spent", [
+        scBytes(nullifier),
       ]);
       return StellarSdk.scValToNative(result) as boolean;
     } catch {
@@ -158,41 +231,34 @@ export class ContractClient {
     }
   }
 
-  /**
-   * Query: check if a commitment exists in the tree.
-   */
-  async commitmentExists(commitment: Uint8Array): Promise<boolean> {
+  async commitmentExists(
+    sourceAddress: string,
+    commitment: Uint8Array
+  ): Promise<boolean> {
     try {
-      const result = await this.invokeViewFunction("commitment_exists", [
-        StellarSdk.nativeToScVal(commitment, { type: "bytesn" }),
-      ]);
+      const result = await this.invokeViewFunction(
+        sourceAddress,
+        "commitment_exists",
+        [scBytes(commitment)]
+      );
       return StellarSdk.scValToNative(result) as boolean;
     } catch {
       return false;
     }
   }
 
-  /**
-   * Query: get the current Merkle tree root.
-   */
-  async getRoot(): Promise<Uint8Array> {
-    const result = await this.invokeViewFunction("root", []);
+  async getRoot(sourceAddress: string): Promise<Uint8Array> {
+    const result = await this.invokeViewFunction(sourceAddress, "root", []);
     return StellarSdk.scValToNative(result) as Uint8Array;
   }
 
-  /**
-   * Query: get total note count.
-   */
-  async getNoteCount(): Promise<bigint> {
-    const result = await this.invokeViewFunction("note_count", []);
-    return BigInt(StellarSdk.scValToNative(result) as number);
+  async getNoteCount(sourceAddress: string): Promise<number> {
+    const result = await this.invokeViewFunction(sourceAddress, "note_count", []);
+    return Number(StellarSdk.scValToNative(result));
   }
 
-  /**
-   * Query: get confidential token metadata.
-   */
-  async getMetadata(): Promise<ConfidentialTokenMetadata> {
-    const result = await this.invokeViewFunction("metadata", []);
+  async getMetadata(sourceAddress: string): Promise<ConfidentialTokenMetadata> {
+    const result = await this.invokeViewFunction(sourceAddress, "metadata", []);
     const native = StellarSdk.scValToNative(result);
     return {
       name: native.name,
@@ -206,26 +272,16 @@ export class ContractClient {
     };
   }
 
-  /**
-   * Get account balance for the underlying asset.
-   */
   async getPublicBalance(address: string): Promise<string> {
     try {
       const account = await this.horizon.loadAccount(address);
-      // Find the balance for the underlying asset
-      // For now, return native XLM balance
-      const native = account.balances.find(
-        (b) => b.asset_type === "native"
-      );
+      const native = account.balances.find((b) => b.asset_type === "native");
       return native?.balance || "0";
     } catch {
       return "0";
     }
   }
 
-  /**
-   * Fetch contract events (for scanning encrypted notes).
-   */
   async getEvents(
     startLedger: number,
     eventTypes: string[] = ["wrap", "conf_transfer", "unwrap"]
@@ -242,16 +298,12 @@ export class ContractClient {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Internal helpers
-  // ---------------------------------------------------------------------------
-
-  private async buildContractTx(
+  private async submitOperation(
     sourceAddress: string,
-    operation: StellarSdk.xdr.Operation
-  ): Promise<StellarSdk.Transaction> {
+    operation: StellarSdk.xdr.Operation,
+    signTransaction: SignTransaction
+  ): Promise<string> {
     const account = await this.rpc.getAccount(sourceAddress);
-
     const tx = new StellarSdk.TransactionBuilder(account, {
       fee: StellarSdk.BASE_FEE,
       networkPassphrase: this.config.networkPassphrase,
@@ -260,51 +312,55 @@ export class ContractClient {
       .setTimeout(180)
       .build();
 
-    // Simulate to get resource estimates
     const simulation = await this.rpc.simulateTransaction(tx);
-
     if (StellarSdk.rpc.Api.isSimulationError(simulation)) {
       throw new Error(`Simulation failed: ${simulation.error}`);
     }
 
-    return StellarSdk.rpc.assembleTransaction(tx, simulation).build();
-  }
+    const assembled = StellarSdk.rpc.assembleTransaction(tx, simulation).build();
+    const signedXdr = await signTransaction(assembled.toXDR());
+    const signedTx = StellarSdk.TransactionBuilder.fromXDR(
+      signedXdr,
+      this.config.networkPassphrase
+    ) as StellarSdk.Transaction;
 
-  private async signAndSubmit(
-    tx: StellarSdk.Transaction,
-    keypair: StellarSdk.Keypair
-  ): Promise<string> {
-    tx.sign(keypair);
-
-    const response = await this.rpc.sendTransaction(tx);
-
+    const response = await this.rpc.sendTransaction(signedTx);
     if (response.status === "ERROR") {
       throw new Error(`Transaction failed: ${response.errorResult}`);
     }
 
-    // Poll for completion
-    let getResponse = await this.rpc.getTransaction(response.hash);
-    while (getResponse.status === "NOT_FOUND") {
+    return this.pollTransaction(response.hash);
+  }
+
+  private signXdr(xdr: string, keypair: StellarSdk.Keypair): string {
+    const tx = StellarSdk.TransactionBuilder.fromXDR(
+      xdr,
+      this.config.networkPassphrase
+    ) as StellarSdk.Transaction;
+    tx.sign(keypair);
+    return tx.toXDR();
+  }
+
+  private async pollTransaction(hash: string): Promise<string> {
+    let response = await this.rpc.getTransaction(hash);
+    let attempts = 0;
+    while (response.status === "NOT_FOUND" && attempts < 30) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      getResponse = await this.rpc.getTransaction(response.hash);
+      response = await this.rpc.getTransaction(hash);
+      attempts++;
     }
 
-    if (getResponse.status === "SUCCESS") {
-      return response.hash;
-    }
-
-    throw new Error(`Transaction failed: ${getResponse.status}`);
+    if (response.status === "SUCCESS") return hash;
+    throw new Error(`Transaction failed: ${response.status}`);
   }
 
   private async invokeViewFunction(
+    sourceAddress: string,
     method: string,
     args: StellarSdk.xdr.ScVal[]
   ): Promise<StellarSdk.xdr.ScVal> {
     const contract = new StellarSdk.Contract(this.config.wrapperContractId);
-
-    // Use a dummy source for view calls
-    const dummySource = StellarSdk.Keypair.random().publicKey();
-    const account = await this.rpc.getAccount(dummySource);
+    const account = await this.rpc.getAccount(sourceAddress);
 
     const tx = new StellarSdk.TransactionBuilder(account, {
       fee: StellarSdk.BASE_FEE,
@@ -315,13 +371,11 @@ export class ContractClient {
       .build();
 
     const simulation = await this.rpc.simulateTransaction(tx);
-
     if (StellarSdk.rpc.Api.isSimulationError(simulation)) {
-      throw new Error(`View call failed: ${simulation.error}`);
+      throw new Error(`${method} query failed: ${simulation.error}`);
     }
-
     if (!simulation.result) {
-      throw new Error("View call returned no result");
+      throw new Error(`${method} query returned no result`);
     }
 
     return simulation.result.retval;

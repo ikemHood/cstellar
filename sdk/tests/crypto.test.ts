@@ -3,10 +3,14 @@
 import { describe, it, expect } from "vitest";
 import {
   computeCommitment,
+  computeCommitmentBytes,
   computeCommitmentFromFields,
   deriveNullifier,
+  deriveNullifierBytes,
   deriveNullifierFromFields,
   computeTreeRoot,
+  transferBindingHash,
+  unwrapBindingHash,
 } from "../src/crypto/commitment.js";
 import {
   sha256,
@@ -138,6 +142,30 @@ describe("Commitment computation", () => {
     expect(hash).toBeInstanceOf(Uint8Array);
     expect(hash.length).toBe(32);
   });
+
+  it("computeCommitmentBytes matches note commitment", () => {
+    const note: Note = {
+      id: "test-1",
+      assetId: "asset",
+      amount: 100n,
+      owner: "owner",
+      randomness: new Uint8Array(32).fill(1),
+      nullifierKey: new Uint8Array(32).fill(2),
+      nullifierSecret: randomBytes(32),
+      spent: false,
+      createdAt: Date.now(),
+    };
+
+    const hash = computeCommitmentBytes(
+      note.assetId,
+      note.amount,
+      note.owner,
+      note.randomness,
+      note.nullifierKey
+    );
+
+    expect(bytesToHex(hash)).toBe(bytesToHex(computeCommitment(note).hash));
+  });
 });
 
 describe("Nullifier derivation", () => {
@@ -205,6 +233,67 @@ describe("Nullifier derivation", () => {
     const n1 = deriveNullifier(note1);
     const n2 = deriveNullifier(note2);
     expect(bytesToHex(n1.value)).not.toBe(bytesToHex(n2.value));
+  });
+
+  it("deriveNullifierBytes matches note nullifier", () => {
+    const note: Note = {
+      id: "test-1",
+      assetId: "asset",
+      amount: 100n,
+      owner: "owner",
+      randomness: randomBytes(32),
+      nullifierKey: new Uint8Array(32).fill(5),
+      nullifierSecret: new Uint8Array(32).fill(6),
+      spent: false,
+      createdAt: Date.now(),
+    };
+
+    const value = deriveNullifierBytes(
+      note.nullifierKey,
+      note.nullifierSecret
+    );
+
+    expect(bytesToHex(value)).toBe(bytesToHex(deriveNullifier(note).value));
+  });
+});
+
+describe("Binding hashes", () => {
+  it("builds 32-byte transfer and withdraw bindings", () => {
+    const root = new Uint8Array(32).fill(1);
+    const nullifier = new Uint8Array(32).fill(2);
+    const outputs = [
+      new Uint8Array(32).fill(3),
+      new Uint8Array(32).fill(4),
+    ];
+    const encryptedHashes = [
+      new Uint8Array(32).fill(5),
+      new Uint8Array(32).fill(6),
+    ];
+
+    const transfer = transferBindingHash(
+      root,
+      "asset",
+      nullifier,
+      outputs,
+      encryptedHashes
+    );
+    const withdraw = unwrapBindingHash(root, "asset", "owner", nullifier, 100n);
+
+    expect(transfer.length).toBe(32);
+    expect(withdraw.length).toBe(32);
+    expect(bytesToHex(transfer)).not.toBe(bytesToHex(withdraw));
+  });
+
+  it("rejects transfer bindings without exactly two outputs", () => {
+    expect(() =>
+      transferBindingHash(
+        new Uint8Array(32),
+        "asset",
+        new Uint8Array(32),
+        [new Uint8Array(32)],
+        [new Uint8Array(32)]
+      )
+    ).toThrow("exactly two output notes");
   });
 });
 
