@@ -23,7 +23,7 @@ function requireContracts() {
 }
 
 function scBytesN(bytes: Uint8Array): StellarSdk.xdr.ScVal {
-  return StellarSdk.nativeToScVal(bytes, { type: "bytesn" });
+  return StellarSdk.nativeToScVal(bytes, { type: "bytes" });
 }
 
 function scBytes(bytes: Uint8Array): StellarSdk.xdr.ScVal {
@@ -46,7 +46,7 @@ function scMap(
   entries: Array<[string, StellarSdk.xdr.ScVal]>
 ): StellarSdk.xdr.ScVal {
   return StellarSdk.xdr.ScVal.scvMap(
-    entries.map(
+    entries.sort(([a], [b]) => a.localeCompare(b)).map(
       ([key, val]) =>
         new StellarSdk.xdr.ScMapEntry({
           key: StellarSdk.xdr.ScVal.scvSymbol(key),

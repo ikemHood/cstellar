@@ -43,7 +43,7 @@ function concat(parts) {
 }
 
 function scBytesN(bytes) {
-  return StellarSdk.nativeToScVal(bytes, { type: "bytesn" });
+  return StellarSdk.xdr.ScVal.scvBytes(bytes);
 }
 
 function scVec(values) {
@@ -52,7 +52,7 @@ function scVec(values) {
 
 function scMap(entries) {
   return StellarSdk.xdr.ScVal.scvMap(
-    entries.map(
+    entries.sort(([a], [b]) => a.localeCompare(b)).map(
       ([key, val]) =>
         new StellarSdk.xdr.ScMapEntry({
           key: StellarSdk.xdr.ScVal.scvSymbol(key),
